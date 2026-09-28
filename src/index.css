@@ -511,6 +511,12 @@ select {
 .player-row-guest {
   grid-template-columns: 1fr auto;
 }
+.player-row-invite {
+  grid-template-columns: 1fr auto;
+  border-top: 1px dashed var(--border);
+  padding-top: 0.75rem;
+  margin-top: 0.25rem;
+}
 @media (max-width: 560px) {
   .player-row {
     grid-template-columns: 1fr 1fr;

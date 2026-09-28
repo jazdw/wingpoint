@@ -141,14 +141,14 @@ npx wrangler d1 execute wingpoint --remote \
 
 ## Stats & sharing
 
+- **Friends** are the people you’ve played at least one game with. They appear in
+  the New Game player dropdown and in the Stats **Friends** list with your
+  head-to-head record; tapping a friend opens their stats. Guests are tracked by
+  name and are never friends.
+- **Invite by email**: to add someone new, enter their email address in New Game.
+  Only allow-listed accounts can be found — the full user list is never exposed.
 - **Personal stats** are attributed to an account when a player row is linked to
-  it (the New Game screen lets you link players to allow-listed users). A guest
-  is tracked by name instead.
-- **Other players’ stats**: on the Stats page you can pick any account you have
-  played a game with. Someone you have never shared a game with is not listed and
-  the API refuses to return their stats.
-- **Head to head**: your Stats page shows results against the linked accounts
-  you have played with (guests aren't tracked head-to-head).
+  it; a guest is tracked by name instead.
 - **Visibility**: a game can only be seen by its owner and the linked players in
   it. There is no global/group browsing.
 - **Invitations**: linking another account to a game sends them an invitation;
@@ -257,7 +257,7 @@ worker/            Cloudflare Worker API (Hono)
   auth.ts          Google OAuth, sessions, allow-list
   games.ts         Game CRUD + auto-save persistence
   stats.ts         Aggregate statistics
-  users.ts         Allow-listed account list
+  users.ts         Friends list + email lookup
 migrations/        D1 migrations
 src/               React app
   components/      Layout, score sheet, score input

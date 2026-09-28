@@ -59,6 +59,7 @@ export function StatsPage() {
 
   const stats = statsQuery.data?.stats;
   const players = playersQuery.data?.players ?? [];
+  const friendIds = new Set(players.map((player) => player.id));
   const maxCategory = Math.max(1, ...(stats?.categoryAverages.map((item) => item.average) ?? [1]));
 
   if (!user) {
@@ -264,29 +265,48 @@ export function StatsPage() {
 
           {stats.rivals.length > 0 && (
             <section className="card">
-              <h2>Head to head</h2>
+              <h2>Friends</h2>
+              <p className="muted">
+                Everyone you’ve played a game with, and your head-to-head record. Linked players
+                only — guests aren’t tracked here.
+              </p>
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Opponent</th>
+                    <th>Friend</th>
                     <th>Games</th>
-                    <th>Wins</th>
-                    <th>Their wins</th>
-                    <th>Avg</th>
+                    <th>You</th>
+                    <th>Them</th>
+                    <th>Your avg</th>
                     <th>Their avg</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {stats.rivals.map((rival) => (
-                    <tr key={rival.userId ?? rival.name}>
-                      <td>{rival.name}</td>
-                      <td>{rival.gamesTogether}</td>
-                      <td>{rival.myWins}</td>
-                      <td>{rival.theirWins}</td>
-                      <td>{rival.myAverage}</td>
-                      <td>{rival.theirAverage}</td>
-                    </tr>
-                  ))}
+                  {stats.rivals.map((rival) => {
+                    const isFriend = rival.userId ? friendIds.has(rival.userId) : false;
+                    return (
+                      <tr key={rival.userId ?? rival.name}>
+                        <td>
+                          {isFriend && rival.userId !== subjectId ? (
+                            <button
+                              type="button"
+                              className="link"
+                              onClick={() => setSubjectId(rival.userId as string)}
+                            >
+                              {rival.name}
+                            </button>
+                          ) : (
+                            rival.name
+                          )}
+                        </td>
+                        <td>{rival.gamesTogether}</td>
+                        <td>{rival.myWins}</td>
+                        <td>{rival.theirWins}</td>
+                        <td>{rival.myAverage}</td>
+                        <td>{rival.theirAverage}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </section>

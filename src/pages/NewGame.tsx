@@ -36,6 +36,8 @@ export function NewGame() {
     { id: newId(), name: user?.name ?? 'Player 1', userId: user?.id ?? null },
   ]);
   const [error, setError] = useState<string | null>(null);
+  const [inviteEmail, setInviteEmail] = useState('');
+  const [inviteError, setInviteError] = useState<string | null>(null);
 
   const config = normalizeConfig({ expansions, goalBoard });
   const profile = deriveProfile(config);
@@ -74,6 +76,28 @@ export function NewGame() {
 
   function removePlayer(index: number) {
     setPlayers((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function inviteByEmail() {
+    const email = inviteEmail.trim();
+    if (!email) return;
+    setInviteError(null);
+    try {
+      const result = await api<{ user: PublicUser }>(
+        `/api/users/lookup?email=${encodeURIComponent(email)}`,
+      );
+      if (players.some((player) => player.userId === result.user.id)) {
+        setInviteError('That person is already in this game.');
+        return;
+      }
+      setPlayers((prev) => [
+        ...prev,
+        { id: newId(), name: result.user.name, userId: result.user.id },
+      ]);
+      setInviteEmail('');
+    } catch (caught) {
+      setInviteError(caught instanceof Error ? caught.message : 'Could not find that account.');
+    }
   }
 
   function submit() {
@@ -217,10 +241,36 @@ export function NewGame() {
             </div>
           );
         })}
+        {user && (
+          <div className="player-row player-row-invite">
+            <input
+              type="email"
+              value={inviteEmail}
+              placeholder="Invite by email…"
+              aria-label="Invite player by email"
+              onChange={(event) => setInviteEmail(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  void inviteByEmail();
+                }
+              }}
+            />
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => void inviteByEmail()}
+              disabled={!inviteEmail.trim()}
+            >
+              Invite
+            </button>
+          </div>
+        )}
+        {inviteError && <p className="alert alert-error">{inviteError}</p>}
         <p className="fine-print">
-          A game needs at least 2 players. Linking a player to an account uses their display name,
-          attributes their stats and lets them watch the game live (they’ll be invited to accept).
-          Guests are tracked by name.
+          A game needs at least 2 players. Invite a WingPoint account by email; people you’ve
+          already played with appear in the dropdown. Linked players use their display name and
+          must accept before the game counts for them. Guests are tracked by name.
         </p>
       </div>
 
