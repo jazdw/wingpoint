@@ -91,12 +91,15 @@ export function NewGame() {
         setInviteError('That person is already in this game.');
         return;
       }
+      // If they're already a friend, show their name. Otherwise show the email
+      // until they accept (their name stays hidden).
+      const isFriend = users.some((friend) => friend.id === result.user.id);
       setPlayers((prev) => [
         ...prev,
         {
           id: newId(),
           name: result.user.name,
-          email: result.user.email,
+          email: isFriend ? null : result.user.email,
           userId: result.user.id,
         },
       ]);
@@ -221,7 +224,7 @@ export function NewGame() {
                 />
               )}
               {player.email ? (
-                <span className="badge badge-warn">invited</span>
+                <span className="muted">will be invited</span>
               ) : (
                 user && (
                 <select
