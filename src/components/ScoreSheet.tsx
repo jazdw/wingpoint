@@ -6,6 +6,7 @@ import {
   GOAL_ROUNDS,
   goalRoundKey,
   nectarKey,
+  ROUND_GOAL_POINTS,
   TIEBREAK_KEY,
   type ScoringProfile,
 } from '../../shared/scoring';
@@ -159,11 +160,14 @@ export function ScoreSheet({
                               }
                             >
                               <option value={0}>—</option>
-                              {places.map((place) => (
-                                <option key={place.value} value={place.value}>
-                                  {place.label}
-                                </option>
-                              ))}
+                              {places.map((place) => {
+                                const points = ROUND_GOAL_POINTS[round - 1]?.[place.value - 1] ?? 0;
+                                return (
+                                  <option key={place.value} value={place.value}>
+                                    {place.label} · {points} {points === 1 ? 'pt' : 'pts'}
+                                  </option>
+                                );
+                              })}
                             </select>
                           )}
                         </td>

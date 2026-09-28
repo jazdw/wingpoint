@@ -221,10 +221,12 @@ export function configName(config: GameConfig, modes: ScoringMode[] = []): strin
 export function deriveProfile(config: GameConfig, modes: ScoringMode[] = []): ScoringProfile {
   const hasAsia = config.coreSets.includes('asia');
   const expansions = new Set(config.expansions);
+  // Ordered by when scoring happens: the end-of-round goals are scored during
+  // the rounds, then the end-of-game tally.
   const categories: CategoryDef[] = [
+    { ...ROUND_GOALS, help: goalBoardHelp(config.goalBoard) },
     BIRDS,
     BONUS_CARDS,
-    { ...ROUND_GOALS, help: goalBoardHelp(config.goalBoard) },
     EGGS,
     CACHED_FOOD,
     TUCKED_CARDS,
