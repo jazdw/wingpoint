@@ -46,6 +46,7 @@ export interface PlayerRow {
   id: string;
   game_id: string;
   user_id: string | null;
+  user_email?: string | null;
   name: string;
   seat: number;
   status: PlayerStatus;
@@ -81,6 +82,7 @@ function serializePlayer(row: PlayerRow): GamePlayer {
   return {
     id: row.id,
     name: row.name,
+    email: row.user_email ?? null,
     userId: row.user_id,
     seat: row.seat,
     status: row.status === 'pending' ? 'pending' : 'accepted',
@@ -126,6 +128,7 @@ export function serializeSummary(row: GameRow, players: PlayerRow[]): GameSummar
     players: ordered.map((player, index) => ({
       id: player.id,
       name: player.name,
+      email: player.user_email ?? null,
       userId: player.user_id,
       status: player.status === 'pending' ? 'pending' : 'accepted',
       total: computed.totals[index] ?? 0,
@@ -146,7 +149,11 @@ export async function loadGameRow(env: Env, id: string): Promise<GameRow | null>
 
 async function loadPlayerRows(env: Env, gameId: string): Promise<PlayerRow[]> {
   const result = await env.DB.prepare(
-    'SELECT * FROM game_players WHERE game_id = ? ORDER BY seat ASC',
+    `SELECT gp.*, u.email AS user_email
+       FROM game_players gp
+       LEFT JOIN users u ON u.id = gp.user_id
+      WHERE gp.game_id = ?
+      ORDER BY gp.seat ASC`,
   )
     .bind(gameId)
     .all<PlayerRow>();
@@ -390,7 +397,11 @@ gameRoutes.get('/', async (c) => {
   )
     .bind(user.id, user.id)
     .all<GameRow>();
-  const players = await c.env.DB.prepare('SELECT * FROM game_players').all<PlayerRow>();
+  const players = await c.env.DB.prepare(
+    `SELECT gp.*, u.email AS user_email
+       FROM game_players gp
+       LEFT JOIN users u ON u.id = gp.user_id`,
+  ).all<PlayerRow>();
 
   const playersByGame = new Map<string, PlayerRow[]>();
   for (const player of players.results) {

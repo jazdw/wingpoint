@@ -16,6 +16,7 @@ import { createGame } from '../lib/gameService';
 interface DraftPlayer {
   id: string;
   name: string;
+  email?: string | null;
   userId: string | null;
 }
 
@@ -92,7 +93,12 @@ export function NewGame() {
       }
       setPlayers((prev) => [
         ...prev,
-        { id: newId(), name: result.user.name, userId: result.user.id },
+        {
+          id: newId(),
+          name: result.user.name,
+          email: result.user.email,
+          userId: result.user.id,
+        },
       ]);
       setInviteEmail('');
     } catch (caught) {
@@ -196,7 +202,11 @@ export function NewGame() {
           const account = accountOptions.find((candidate) => candidate.id === player.userId);
           return (
             <div className={`player-row${user ? '' : ' player-row-guest'}`} key={player.id}>
-              {player.userId ? (
+              {player.email ? (
+                <span className="player-row-name player-row-account" title="Invited player">
+                  {player.email}
+                </span>
+              ) : player.userId ? (
                 <span className="player-row-name player-row-account" title="Account display name">
                   {account?.name ?? player.name}
                 </span>
@@ -210,7 +220,10 @@ export function NewGame() {
                   onFocus={(event) => event.currentTarget.select()}
                 />
               )}
-              {user && (
+              {player.email ? (
+                <span className="badge badge-warn">invited</span>
+              ) : (
+                user && (
                 <select
                   aria-label={`Player ${index + 1} type`}
                   value={player.userId ?? ''}
@@ -250,6 +263,7 @@ export function NewGame() {
                     <option value="">Guest (enter a name)</option>
                   </optgroup>
                 </select>
+                )
               )}
               <button
                 type="button"

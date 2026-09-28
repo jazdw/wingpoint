@@ -25,6 +25,7 @@ userRoutes.get('/', async (c) => {
        FROM users u
        JOIN game_players gp ON gp.user_id = u.id
       WHERE u.id != ?
+        AND gp.status = 'accepted'
         AND gp.game_id IN (
           SELECT game_id FROM game_players WHERE user_id = ? AND status = 'accepted'
         )

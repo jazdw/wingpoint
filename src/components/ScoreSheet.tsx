@@ -15,6 +15,7 @@ import { ScoreInput } from './ScoreInput';
 export interface EditablePlayer {
   id: string;
   name: string;
+  email?: string | null;
   userId: string | null;
   status: 'pending' | 'accepted';
   scores: ScoreMap;
@@ -55,7 +56,11 @@ export function ScoreSheet({ profile, players, onChange, readOnly = false }: Sco
             {players.map((player, index) => (
               <th key={player.id} scope="col" className={winnerSet.has(index) ? 'winner' : ''}>
                 <div className="player-head">
-                  <span className="player-name">{player.name}</span>
+                  <span className="player-name">
+                    {player.status === 'pending'
+                      ? (player.email ?? 'Invited player')
+                      : player.name}
+                  </span>
                   {player.status === 'pending' && <span className="badge badge-warn">invited</span>}
                   <div className="player-total-badge">
                     {winnerSet.has(index) && <span aria-label="Winner">🏆</span>}

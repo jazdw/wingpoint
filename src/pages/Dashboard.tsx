@@ -50,7 +50,9 @@ function GameCard({ game, currentUserId }: { game: GameSummary; currentUserId?: 
           <li key={player.id} className={winnerIds.has(player.id) ? 'winner' : ''}>
             <span className="pname">
               {winnerIds.has(player.id) && <span aria-hidden="true">🏆 </span>}
-              {player.name}
+              {player.status === 'pending'
+                ? (player.email ?? 'Invited player')
+                : player.name}
               {player.status === 'pending' && <span className="muted"> (invited)</span>}
             </span>
             <span className="ptotal">{player.total}</span>

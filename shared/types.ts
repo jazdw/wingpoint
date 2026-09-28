@@ -23,6 +23,8 @@ export interface GameConfig {
 export interface GamePlayer {
   id: string;
   name: string;
+  /** Present for linked players; shown instead of the name until they accept. */
+  email?: string | null;
   userId: string | null;
   seat?: number;
   status: PlayerStatus;
@@ -56,6 +58,7 @@ export interface GameSummary {
   players: {
     id: string;
     name: string;
+    email?: string | null;
     userId: string | null;
     status: PlayerStatus;
     total: number;
