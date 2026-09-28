@@ -15,6 +15,9 @@ front end, Google sign-in (allow-list only) and offline support.
   food as per the rulebook.
 - **Auto-save** — every change is saved shortly after you stop typing. While
   offline, edits are kept in `localStorage` and synced when you reconnect.
+- **Offline & guest mode** — use the app without signing in: games with guest
+  players live on the device and work fully offline. Signed-in users can keep
+  editing an in-progress game offline; changes sync when you reconnect.
 - **Complete or cancel** — mark a game **completed** to count it in stats, or
   **cancel** it to abandon it without deleting. Cancelled games stay in your list
   (marked Cancelled), and are excluded from stats.
@@ -121,6 +124,18 @@ Only allow-listed emails can sign in. Configure them with either:
 npx wrangler d1 execute wingpoint --remote \
   --command "INSERT INTO allowed_emails (email, added_at, note) VALUES ('friend@example.com', $(date +%s000), 'invited');"
 ```
+
+## Offline & guest mode
+
+- **Guest games (no sign-in)**: with no account, games are stored in
+  `localStorage` on the device. Create a game, keep score and complete it with no
+  connection at all. These games are local to the device and are not uploaded
+  when you sign in yet.
+- **Signed-in offline**: the signed-in user and any game you open are cached, so
+  reloading offline keeps you in that game with your latest scores. Edits are
+  kept locally and pushed to the server when you're back online.
+- **Still needs a connection**: signing in, loading games/stats you have not
+  opened on this device, and creating games with linked accounts.
 
 ## Stats & sharing
 

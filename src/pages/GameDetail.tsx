@@ -97,6 +97,7 @@ export function GameDetail() {
 
   const [draft, setDraft] = useState<Game | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('saved');
+  const [saveError, setSaveError] = useState<string | null>(null);
   const lastSaved = useRef('');
   const initialised = useRef(false);
 
@@ -141,15 +142,22 @@ export function GameDetail() {
     onSuccess: (_result, game) => {
       lastSaved.current = JSON.stringify(toPayload(game));
       clearDraft(draftKey);
+      setSaveError(null);
       setSaveState('saved');
       queryClient.invalidateQueries({ queryKey: ['games'] });
       queryClient.invalidateQueries({ queryKey: ['stats'] });
     },
-    onError: () => setSaveState('error'),
+    onError: (error: Error) => {
+      console.error('Save failed', error);
+      setSaveError(error.message);
+      setSaveState('error');
+    },
   });
 
   useEffect(() => {
     if (!draft || readOnly) return;
+    // A server game can't be saved until the session is known.
+    if (!isLocal && !user) return;
     const payload = JSON.stringify(toPayload(draft));
     if (payload === lastSaved.current) return;
     // Persist immediately so an offline reload keeps the current state.
@@ -161,7 +169,14 @@ export function GameDetail() {
     setSaveState('saving');
     const timer = window.setTimeout(() => saveGame(draft), 900);
     return () => window.clearTimeout(timer);
-  }, [draft, online, draftKey, readOnly, saveGame]);
+  }, [draft, online, draftKey, readOnly, user, isLocal, saveGame]);
+
+  // Automatically retry a failed save while we're online.
+  useEffect(() => {
+    if (saveState !== 'error' || !draft || !online) return;
+    const timer = window.setTimeout(() => saveGame(draft), 3000);
+    return () => window.clearTimeout(timer);
+  }, [saveState, draft, online, saveGame]);
 
   const remove = useMutation({
     mutationFn: () => deleteGame(user, id),
@@ -319,7 +334,11 @@ export function GameDetail() {
               {game.status === 'in_progress' ? '● Live — score master is editing' : '● View only'}
             </span>
           ) : (
-            <span className={`save-state save-${saveState}`}>{SAVE_LABELS[saveState]}</span>
+            <span className={`save-state save-${saveState}`} title={saveError ?? undefined}>
+              {saveState === 'error' && saveError
+                ? `Could not save: ${saveError}`
+                : SAVE_LABELS[saveState]}
+            </span>
           )}
           {!readOnly && (
             <>

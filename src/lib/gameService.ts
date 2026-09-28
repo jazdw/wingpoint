@@ -54,11 +54,12 @@ export async function createGame(user: AuthUser | null, input: unknown): Promise
 }
 
 export async function persistGame(user: AuthUser | null, game: Game): Promise<Game> {
-  if (!user || isLocalGameId(game.id)) {
+  if (isLocalGameId(game.id)) {
     const updated = updateLocalGame(game.id, game);
     if (!updated) throw new Error('Game not found');
     return updated;
   }
+  if (!user) throw new Error('Not signed in');
   const result = await api<{ game: Game }>(`/api/games/${game.id}`, {
     method: 'PATCH',
     body: JSON.stringify(gamePayload(game)),
