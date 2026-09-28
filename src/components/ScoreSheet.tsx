@@ -66,8 +66,10 @@ export function ScoreSheet({
             {players.map((player, index) => (
               <th key={player.id} scope="col" className={winnerSet.has(index) ? 'winner' : ''}>
                 <div className="player-head">
-                  {readOnly ? (
-                    <span className="player-name">{player.name}</span>
+                  {readOnly || player.userId ? (
+                    <span className="player-name" title={player.userId ? 'Account display name' : undefined}>
+                      {player.name}
+                    </span>
                   ) : (
                     <input
                       className="player-name-input"
@@ -137,6 +139,7 @@ export function ScoreSheet({
 
             if (category.kind === 'roundGoals') {
               const blue = profile.goalBoard === 'blue';
+              const places = GOAL_PLACES.filter((place) => place.value <= Math.min(3, players.length));
               return (
                 <Fragment key={category.id}>
                   <tr className="group-row">
@@ -175,7 +178,7 @@ export function ScoreSheet({
                               }
                             >
                               <option value={0}>—</option>
-                              {GOAL_PLACES.map((place) => (
+                              {places.map((place) => (
                                 <option key={place.value} value={place.value}>
                                   {place.label}
                                 </option>

@@ -8,6 +8,8 @@ import {
   deriveProfile,
   emptyScores,
   fieldKeys,
+  GOAL_ROUNDS,
+  goalRoundKey,
   normalizeConfig,
   SELECTABLE_EXPANSIONS,
   TIEBREAK_KEY,
@@ -271,9 +273,26 @@ export function GameDetail() {
 
   function removePlayer(index: number) {
     if (readOnly) return;
-    setDraft((prev) =>
-      prev ? { ...prev, players: prev.players.filter((_, i) => i !== index) } : prev,
-    );
+    setDraft((prev) => {
+      if (!prev) return prev;
+      const players = prev.players.filter((_, i) => i !== index);
+      const profile = deriveProfile(gameConfig(prev));
+      const maxPlace = Math.min(3, players.length);
+      // A 3rd-place goal no longer exists when the game drops to 2 players.
+      const adjusted =
+        profile.goalBoard === 'green' && maxPlace < 3
+          ? players.map((player) => {
+              const scores = { ...player.scores };
+              for (let round = 1; round <= GOAL_ROUNDS; round += 1) {
+                const key = goalRoundKey(round);
+                const value = scores[key];
+                if (typeof value === 'number' && value > maxPlace) scores[key] = null;
+              }
+              return { ...player, scores };
+            })
+          : players;
+      return { ...prev, players: adjusted };
+    });
   }
 
   return (

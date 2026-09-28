@@ -267,6 +267,9 @@ export function validateConfig(
   if (config.coreSets.length === 0) {
     return { valid: false, error: 'Choose at least one standalone set.' };
   }
+  if (playerCount < 2) {
+    return { valid: false, error: 'A game needs at least 2 players.' };
+  }
   if (modes.includes('duet')) {
     if (!hasAsia) return { valid: false, error: 'Duet mode requires Wingspan Asia.' };
     if (playerCount !== 2) {

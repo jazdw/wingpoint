@@ -211,7 +211,9 @@ Asia, Duet with other than 2 players) are rejected with a message.
 | 4     | 7   | 4   | 3   |
 
 Ties combine the points for the places the tied players occupy, divide evenly and
-round down (two players tied for 1st in round 1 each get 2).
+round down (two players tied for 1st in round 1 each get 2). A game needs at
+least **2 players**, and a 3rd-place goal only exists with **3+ players** — both
+are enforced in the UI and rejected on save.
 
 **Blue end-of-round goals** are entered per round as the number of targeted items;
 each scores one point, capped at 5 per round.

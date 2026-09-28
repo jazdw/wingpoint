@@ -250,6 +250,29 @@ function normalizePlayers(profile: ScoringProfile, input: unknown): PlayerInput[
   return players;
 }
 
+/**
+ * Scoring rules that depend on the player count. Green end-of-round goals only
+ * have a 3rd place when there are at least 3 players, for example.
+ */
+function validateScores(
+  profile: ScoringProfile,
+  players: PlayerInput[],
+  playerCount: number,
+): string | null {
+  if (profile.goalBoard !== 'green') return null;
+  const maxPlace = Math.min(3, playerCount);
+  if (maxPlace >= 3) return null;
+  for (const player of players) {
+    for (let round = 1; round <= GOAL_ROUNDS; round += 1) {
+      const value = player.scores?.[goalRoundKey(round)];
+      if (typeof value === 'number' && value > maxPlace) {
+        return `A placement of ${value} needs at least ${value} players.`;
+      }
+    }
+  }
+  return null;
+}
+
 async function writePlayers(
   env: Env,
   gameId: string,
@@ -350,6 +373,8 @@ gameRoutes.post('/', async (c) => {
 
   const validation = validateConfig(config, players.length);
   if (!validation.valid) return c.json({ error: validation.error }, 400);
+  const scoreError = validateScores(profile, players, players.length);
+  if (scoreError) return c.json({ error: scoreError }, 400);
 
   const user = c.get('user');
   const status = STATUSES.includes(body.status as GameStatus)
@@ -443,6 +468,10 @@ gameRoutes.patch('/:id', async (c) => {
     0;
   const validation = validateConfig(config, playerCount);
   if (!validation.valid) return c.json({ error: validation.error }, 400);
+  if (inputs) {
+    const scoreError = validateScores(profile, inputs, inputs.length);
+    if (scoreError) return c.json({ error: scoreError }, 400);
+  }
 
   const now = Date.now();
   await c.env.DB.prepare(

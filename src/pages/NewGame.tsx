@@ -160,46 +160,62 @@ export function NewGame() {
           </button>
         </div>
 
-        {players.map((player, index) => (
-          <div className="player-row" key={player.id}>
-            <input
-              className="player-row-name"
-              value={player.name}
-              placeholder={`Player ${index + 1}`}
-              aria-label={`Player ${index + 1} name`}
-              onChange={(event) => updatePlayer(index, { name: event.target.value.slice(0, 40) })}
-              onFocus={(event) => event.currentTarget.select()}
-            />
-            <select
-              aria-label={`Account for ${player.name}`}
-              value={player.userId ?? ''}
-              onChange={(event) => updatePlayer(index, { userId: event.target.value || null })}
-            >
-              <option value="">Guest</option>
-              {users.map((account) => (
-                <option
-                  key={account.id}
-                  value={account.id}
-                  disabled={selectedUserIds.has(account.id) && player.userId !== account.id}
-                >
-                  {account.name}
-                  {selectedUserIds.has(account.id) && player.userId !== account.id ? ' (already added)' : ''}
-                </option>
-              ))}
-            </select>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => removePlayer(index)}
-              disabled={players.length <= 1}
-            >
-              Remove
-            </button>
-          </div>
-        ))}
+        {players.map((player, index) => {
+          const account = users.find((candidate) => candidate.id === player.userId);
+          return (
+            <div className="player-row" key={player.id}>
+              {player.userId ? (
+                <span className="player-row-name player-row-account" title="Account display name">
+                  {account?.name ?? player.name}
+                </span>
+              ) : (
+                <input
+                  className="player-row-name"
+                  value={player.name}
+                  placeholder={`Player ${index + 1}`}
+                  aria-label={`Player ${index + 1} name`}
+                  onChange={(event) => updatePlayer(index, { name: event.target.value.slice(0, 40) })}
+                  onFocus={(event) => event.currentTarget.select()}
+                />
+              )}
+              <select
+                aria-label={`Account for ${player.name}`}
+                value={player.userId ?? ''}
+                onChange={(event) => {
+                  const userId = event.target.value || null;
+                  const selected = users.find((candidate) => candidate.id === userId);
+                  updatePlayer(index, { userId, name: selected ? selected.name : player.name });
+                }}
+              >
+                <option value="">Guest</option>
+                {users.map((candidate) => (
+                  <option
+                    key={candidate.id}
+                    value={candidate.id}
+                    disabled={selectedUserIds.has(candidate.id) && player.userId !== candidate.id}
+                  >
+                    {candidate.name}
+                    {selectedUserIds.has(candidate.id) && player.userId !== candidate.id
+                      ? ' (already added)'
+                      : ''}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => removePlayer(index)}
+                disabled={players.length <= 2}
+              >
+                Remove
+              </button>
+            </div>
+          );
+        })}
         <p className="fine-print">
-          Linking a player to an account lets WingPoint attribute stats and lets them watch the game
-          live. They’ll be invited to accept. Guests are tracked by name.
+          A game needs at least 2 players. Linking a player to an account uses their display name,
+          attributes their stats and lets them watch the game live (they’ll be invited to accept).
+          Guests are tracked by name.
         </p>
       </div>
 
