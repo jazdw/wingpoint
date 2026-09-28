@@ -2,12 +2,17 @@
  * Data-driven Wingspan scoring engine.
  *
  * A "profile" describes which score categories apply to a game (base game,
- * which expansions are mixed in, solo/duet mode, ...). Every category is a
- * simple counter except `nectar`, which uses the Oceania majority rule.
+ * which expansions are mixed in, solo/duet/flock mode, ...). Most categories
+ * are simple counters. Special kinds:
+ *
+ *  - `nectar`      majority scoring per habitat (Oceania)
+ *  - `roundGoals`  the four end-of-round goals, scored from each player's
+ *                  placement with the official per-round point table and the
+ *                  official tie-splitting rule
+ *  - `signed`      may be negative (Americas hummingbird track)
  *
  * Both the Worker and the React app import this module so the live UI and the
- * stored totals always agree. Adding a new expansion is a matter of adding a
- * category definition and a profile below.
+ * stored totals always agree.
  */
 
 import type { ScoreMap } from './types';
@@ -18,7 +23,7 @@ export interface CategoryDef {
   short: string;
   help?: string;
   /** Defaults to 'counter' when omitted. */
-  kind?: 'counter' | 'nectar';
+  kind?: 'counter' | 'nectar' | 'roundGoals' | 'signed';
   /** Points awarded per unit (default 1). */
   perUnit?: number;
   /** For nectar categories. */
@@ -51,7 +56,39 @@ export const EXPANSIONS: ExpansionDef[] = [
   { id: 'european', name: 'European Expansion', short: 'Europe' },
   { id: 'oceania', name: 'Oceania Expansion', short: 'Oceania' },
   { id: 'asia', name: 'Asia Expansion', short: 'Asia' },
+  { id: 'americas', name: 'Americas Expansion', short: 'Americas' },
 ];
+
+/* ------------------------------------------------------------------ */
+/* End-of-round goals                                                  */
+/* ------------------------------------------------------------------ */
+
+export const GOAL_ROUNDS = 4;
+
+/**
+ * Official base-game end-of-round goal points by round (round 1..4) and place
+ * (1st, 2nd, 3rd). Later rounds are worth more.
+ */
+export const ROUND_GOAL_POINTS: number[][] = [
+  [4, 1, 0],
+  [5, 2, 1],
+  [6, 3, 2],
+  [7, 4, 3],
+];
+
+export const GOAL_PLACES = [
+  { value: 1, label: '1st' },
+  { value: 2, label: '2nd' },
+  { value: 3, label: '3rd' },
+];
+
+export function goalRoundKey(round: number): string {
+  return `goalR${round}`;
+}
+
+/* ------------------------------------------------------------------ */
+/* Categories                                                          */
+/* ------------------------------------------------------------------ */
 
 const BASE_CATEGORIES: CategoryDef[] = [
   { id: 'birds', label: 'Bird points', short: 'Birds', help: 'Points printed on the bird cards you played.' },
@@ -60,7 +97,8 @@ const BASE_CATEGORIES: CategoryDef[] = [
     id: 'endOfRoundGoals',
     label: 'End-of-round goals',
     short: 'Goals',
-    help: 'Sum of the points you earned in the four end-of-round goals.',
+    kind: 'roundGoals',
+    help: 'Enter each player’s placement for every round. Ties combine the places and split the points.',
   },
   { id: 'eggs', label: 'Eggs', short: 'Eggs', help: 'One point per egg on your birds.' },
   { id: 'cachedFood', label: 'Cached food', short: 'Food', help: 'One point per food token cached on your birds.' },
@@ -69,7 +107,6 @@ const BASE_CATEGORIES: CategoryDef[] = [
 
 const NECTAR_AWARDS = [5, 2];
 
-/** Repeated per habitat. Not part of the score total; used only to break ties. */
 export const TIEBREAK_KEY = 'unusedFood';
 
 export const NECTAR_HABITATS = [
@@ -83,7 +120,7 @@ const NECTAR_CATEGORY: CategoryDef = {
   label: 'Nectar',
   short: 'Nectar',
   kind: 'nectar',
-  help: 'Most nectar in a habitat scores 5, second most scores 2 (3+ players).',
+  help: 'Most nectar in a habitat scores 5, second most scores 2.',
   habitats: NECTAR_HABITATS,
 };
 
@@ -91,7 +128,15 @@ const DUET_CATEGORY: CategoryDef = {
   id: 'duetMap',
   label: 'Duet map',
   short: 'Duet',
-  help: 'Points from duet tokens placed on the duet map.',
+  help: 'Points from your largest contiguous group of Duet tokens on the map.',
+};
+
+const HUMMINGBIRD_CATEGORY: CategoryDef = {
+  id: 'hummingbirdTrack',
+  label: 'Hummingbird track',
+  short: 'Humm.',
+  kind: 'signed',
+  help: 'Net points from your hummingbird track. May be negative.',
 };
 
 export const PROFILES: ScoringProfile[] = [
@@ -148,6 +193,21 @@ export const PROFILES: ScoringProfile[] = [
     categories: [...BASE_CATEGORIES, NECTAR_CATEGORY],
     nectarTies: 'friendly',
   },
+  {
+    id: 'americas',
+    name: 'Base + Americas',
+    description: 'Americas Expansion. Adds the hummingbird track.',
+    expansions: ['base', 'americas'],
+    categories: [...BASE_CATEGORIES, HUMMINGBIRD_CATEGORY],
+  },
+  {
+    id: 'americas-oceania',
+    name: 'Oceania + Americas',
+    description: 'Americas with Oceania nectar and hummingbird track.',
+    expansions: ['base', 'european', 'oceania', 'americas'],
+    categories: [...BASE_CATEGORIES, NECTAR_CATEGORY, HUMMINGBIRD_CATEGORY],
+    nectarTies: 'split',
+  },
 ];
 
 export const DEFAULT_PROFILE_ID = 'base';
@@ -155,6 +215,10 @@ export const DEFAULT_PROFILE_ID = 'base';
 export function getProfile(profileId: string | null | undefined): ScoringProfile {
   return PROFILES.find((p) => p.id === profileId) ?? PROFILES[0];
 }
+
+/* ------------------------------------------------------------------ */
+/* Raw input keys                                                      */
+/* ------------------------------------------------------------------ */
 
 /** Raw input key for a nectar habitat (e.g. `nectar_forest`). */
 export function nectarKey(habitatId: string): string {
@@ -167,6 +231,8 @@ export function fieldKeys(profile: ScoringProfile): string[] {
   for (const category of profile.categories) {
     if (category.kind === 'nectar' && category.habitats) {
       for (const habitat of category.habitats) keys.push(nectarKey(habitat.id));
+    } else if (category.kind === 'roundGoals') {
+      for (let round = 1; round <= GOAL_ROUNDS; round += 1) keys.push(goalRoundKey(round));
     } else {
       keys.push(category.id);
     }
@@ -179,11 +245,15 @@ function toNumber(value: number | null | undefined): number {
   return value;
 }
 
+/* ------------------------------------------------------------------ */
+/* Computation                                                         */
+/* ------------------------------------------------------------------ */
+
 /**
  * Compute per-player category points and totals.
  *
- * Nectar majority is a cross-player calculation, so this always operates on
- * the full set of players in a game.
+ * Nectar majority and end-of-round goal ties are cross-player calculations, so
+ * this always operates on the full set of players in a game.
  */
 export function computeGame(
   profileId: string,
@@ -197,17 +267,57 @@ export function computeGame(
   const profile = getProfile(profileId);
   const perPlayer: Record<string, number>[] = players.map(() => ({}));
 
-  // Plain counters first.
-  profile.categories.forEach((category) => {
-    if (category.kind === 'nectar') return;
+  // Plain counters and signed counters.
+  for (const category of profile.categories) {
+    if (category.kind === 'nectar' || category.kind === 'roundGoals') continue;
     const perUnit = category.perUnit ?? 1;
     players.forEach((player, index) => {
-      perPlayer[index][category.id] = toNumber(player.scores[category.id]) * perUnit;
+      const value = toNumber(player.scores[category.id]);
+      perPlayer[index][category.id] =
+        category.kind === 'signed' ? Math.round(value) : value * perUnit;
     });
-  });
+  }
+
+  // End-of-round goals: placement per round, with official tie splitting.
+  const roundGoals = profile.categories.find((category) => category.kind === 'roundGoals');
+  if (roundGoals) {
+    players.forEach((_, index) => {
+      perPlayer[index][roundGoals.id] = 0;
+    });
+
+    for (let round = 1; round <= GOAL_ROUNDS; round += 1) {
+      const key = goalRoundKey(round);
+      const table = ROUND_GOAL_POINTS[round - 1] ?? [];
+      const placements = players.map((player) => {
+        const value = Math.round(toNumber(player.scores[key]));
+        return value >= 1 && value <= 3 ? value : 0;
+      });
+
+      const groups = new Map<number, number[]>();
+      placements.forEach((place, index) => {
+        if (place === 0) return;
+        const members = groups.get(place) ?? [];
+        members.push(index);
+        groups.set(place, members);
+      });
+
+      for (const [place, members] of groups) {
+        // Tied players occupy the tied place plus the next place(s), and share
+        // the combined points, rounded down.
+        let available = 0;
+        for (let slot = place; slot < place + members.length; slot += 1) {
+          available += table[slot - 1] ?? 0;
+        }
+        const points = Math.floor(available / members.length);
+        members.forEach((index) => {
+          perPlayer[index][roundGoals.id] += points;
+        });
+      }
+    }
+  }
 
   // Nectar majority.
-  const nectarCategory = profile.categories.find((c) => c.kind === 'nectar');
+  const nectarCategory = profile.categories.find((category) => category.kind === 'nectar');
   const friendlyTies = (profile.nectarTies ?? 'split') === 'friendly';
   if (nectarCategory?.habitats) {
     players.forEach((_, index) => {
@@ -228,7 +338,6 @@ export function computeGame(
           points = NECTAR_AWARDS[position] ?? 0;
           position += 1;
         } else {
-          // Combine the points for every place the tied group occupies, then split.
           let available = 0;
           for (let place = position; place < position + groupSize; place += 1) {
             available += NECTAR_AWARDS[place] ?? 0;

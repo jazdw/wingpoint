@@ -3,33 +3,41 @@ interface ScoreInputProps {
   onChange: (value: number | null) => void;
   disabled?: boolean;
   ariaLabel?: string;
+  /** Allow negative values (e.g. the hummingbird track). */
+  signed?: boolean;
 }
 
-export function ScoreInput({ value, onChange, disabled, ariaLabel }: ScoreInputProps) {
+export function ScoreInput({
+  value,
+  onChange,
+  disabled,
+  ariaLabel,
+  signed = false,
+}: ScoreInputProps) {
   const current = value ?? 0;
 
   return (
-    <div className="score-input">
+    <div className={`score-input${signed ? ' score-input-signed' : ''}`}>
       <button
         type="button"
         className="step"
-        onClick={() => onChange(Math.max(0, current - 1))}
-        disabled={disabled || current <= 0}
+        onClick={() => onChange(signed ? current - 1 : Math.max(0, current - 1))}
+        disabled={disabled || (!signed && current <= 0)}
         aria-label={`Decrease ${ariaLabel ?? 'score'}`}
       >
         −
       </button>
       <input
         type="text"
-        inputMode="numeric"
-        pattern="[0-9]*"
+        inputMode={signed ? 'text' : 'numeric'}
         value={value === null || value === undefined ? '' : String(value)}
         aria-label={ariaLabel}
         disabled={disabled}
         onFocus={(event) => event.currentTarget.select()}
         onChange={(event) => {
-          const digits = event.currentTarget.value.replace(/[^0-9]/g, '');
-          onChange(digits === '' ? null : Number(digits));
+          let text = event.currentTarget.value.replace(signed ? /[^0-9-]/g : /[^0-9]/g, '');
+          if (signed) text = text.replace(/(?!^)-/g, '');
+          onChange(text === '' || text === '-' ? null : Number(text));
         }}
       />
       <button

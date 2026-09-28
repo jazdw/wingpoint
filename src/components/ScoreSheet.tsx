@@ -1,5 +1,13 @@
 import { Fragment } from 'react';
-import { computeGame, getProfile, nectarKey, TIEBREAK_KEY } from '../../shared/scoring';
+import {
+  computeGame,
+  GOAL_PLACES,
+  GOAL_ROUNDS,
+  getProfile,
+  goalRoundKey,
+  nectarKey,
+  TIEBREAK_KEY,
+} from '../../shared/scoring';
 import type { ScoreMap } from '../../shared/types';
 import { ScoreInput } from './ScoreInput';
 
@@ -16,6 +24,11 @@ interface ScoreSheetProps {
   onChange: (players: EditablePlayer[]) => void;
   onRemovePlayer?: (index: number) => void;
   readOnly?: boolean;
+}
+
+function placementOf(value: number | null | undefined): number {
+  const numeric = typeof value === 'number' ? Math.round(value) : 0;
+  return numeric >= 0 && numeric <= 3 ? numeric : 0;
 }
 
 export function ScoreSheet({
@@ -83,40 +96,90 @@ export function ScoreSheet({
           </tr>
         </thead>
         <tbody>
-          {profile.categories.map((category) =>
-            category.kind === 'nectar' && category.habitats ? (
-              <Fragment key={category.id}>
-                <tr className="group-row">
-                  <td colSpan={players.length + 1}>
-                    <span className="group-title">{category.label}</span>
-                    <span className="muted">most in each habitat: 5 pts · second: 2 pts (3+ players)</span>
-                  </td>
-                </tr>
-                {category.habitats.map((habitat) => (
-                  <tr key={habitat.id}>
-                    <td className="cat-label sub">{habitat.label}</td>
+          {profile.categories.map((category) => {
+            if (category.kind === 'nectar' && category.habitats) {
+              return (
+                <Fragment key={category.id}>
+                  <tr className="group-row">
+                    <td colSpan={players.length + 1}>
+                      <span className="group-title">{category.label}</span>
+                      <span className="muted">most in each habitat: 5 pts · second: 2 pts</span>
+                    </td>
+                  </tr>
+                  {category.habitats.map((habitat) => (
+                    <tr key={habitat.id}>
+                      <td className="cat-label sub">{habitat.label}</td>
+                      {players.map((player, index) => (
+                        <td key={player.id}>
+                          <ScoreInput
+                            value={player.scores[nectarKey(habitat.id)] ?? null}
+                            onChange={(value) => setScore(index, nectarKey(habitat.id), value)}
+                            disabled={readOnly}
+                            ariaLabel={`${player.name} ${habitat.label}`}
+                          />
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                  <tr className="derived-row">
+                    <td className="cat-label sub">Nectar points</td>
                     {players.map((player, index) => (
-                      <td key={player.id}>
-                        <ScoreInput
-                          value={player.scores[nectarKey(habitat.id)] ?? null}
-                          onChange={(value) => setScore(index, nectarKey(habitat.id), value)}
-                          disabled={readOnly}
-                          ariaLabel={`${player.name} ${habitat.label}`}
-                        />
+                      <td key={player.id} className="derived">
+                        {computed.perPlayer[index]?.[category.id] ?? 0}
                       </td>
                     ))}
                   </tr>
-                ))}
-                <tr className="derived-row">
-                  <td className="cat-label sub">Nectar points</td>
-                  {players.map((player, index) => (
-                    <td key={player.id} className="derived">
-                      {computed.perPlayer[index]?.[category.id] ?? 0}
+                </Fragment>
+              );
+            }
+
+            if (category.kind === 'roundGoals') {
+              return (
+                <Fragment key={category.id}>
+                  <tr className="group-row">
+                    <td colSpan={players.length + 1}>
+                      <span className="group-title">{category.label}</span>
+                      <span className="muted">1st / 2nd / 3rd per round · ties split points</span>
                     </td>
+                  </tr>
+                  {Array.from({ length: GOAL_ROUNDS }, (_, index) => index + 1).map((round) => (
+                    <tr key={round}>
+                      <td className="cat-label sub">Round {round}</td>
+                      {players.map((player, index) => (
+                        <td key={player.id}>
+                          <select
+                            className="placement-select"
+                            aria-label={`${player.name} round ${round} placement`}
+                            value={placementOf(player.scores[goalRoundKey(round)])}
+                            disabled={readOnly}
+                            onChange={(event) =>
+                              setScore(index, goalRoundKey(round), Number(event.target.value))
+                            }
+                          >
+                            <option value={0}>—</option>
+                            {GOAL_PLACES.map((place) => (
+                              <option key={place.value} value={place.value}>
+                                {place.label}
+                              </option>
+                            ))}
+                          </select>
+                        </td>
+                      ))}
+                    </tr>
                   ))}
-                </tr>
-              </Fragment>
-            ) : (
+                  <tr className="derived-row">
+                    <td className="cat-label sub">Goal points</td>
+                    {players.map((player, index) => (
+                      <td key={player.id} className="derived">
+                        {computed.perPlayer[index]?.[category.id] ?? 0}
+                      </td>
+                    ))}
+                  </tr>
+                </Fragment>
+              );
+            }
+
+            return (
               <tr key={category.id}>
                 <td className="cat-label" title={category.help}>
                   {category.label}
@@ -132,13 +195,15 @@ export function ScoreSheet({
                       value={player.scores[category.id] ?? null}
                       onChange={(value) => setScore(index, category.id, value)}
                       disabled={readOnly}
+                      signed={category.kind === 'signed'}
                       ariaLabel={`${player.name} ${category.label}`}
                     />
                   </td>
                 ))}
               </tr>
-            ),
-          )}
+            );
+          })}
+
           <tr className="tiebreak-row">
             <td className="cat-label" title="Only used to break a tie for the highest score.">
               Unused food

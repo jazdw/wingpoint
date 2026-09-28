@@ -14,51 +14,78 @@ function check(label: string, actual: unknown, expected: unknown) {
   }
 }
 
-function nectarProfile(id: string) {
-  const profile = PROFILES.find((p) => p.id === id);
-  if (!profile) throw new Error(`missing profile ${id}`);
-  return profile;
-}
-
-// Standard Oceania: two tied for first split 5+2 => 3 each; next gets 0.
-const standard = nectarProfile('oceania');
-computeGame(standard.id, []);
 const forest = (counts: number[], profileId = 'oceania') => {
   const players = counts.map((n) => ({ scores: { nectar_forest: n } as Record<string, number | null> }));
   const { perPlayer } = computeGame(profileId, players);
   return perPlayer.map((points) => points.nectar);
 };
 
-check('standard: 5/3/0', forest([5, 3, 0]), [5, 2, 0]);
-check('standard: 2-player second scores', forest([4, 1]), [5, 2]);
-check('standard: two tied first split', forest([3, 3, 1]), [3, 3, 0]);
-check('standard: three tied first', forest([3, 3, 3]), [2, 2, 2]);
-check('standard: tie for second splits 2+0', forest([5, 3, 3]), [5, 1, 1]);
-check('standard: zeros never score', forest([0, 0, 0]), [0, 0, 0]);
+// Standard Oceania nectar: ties split the occupied places, rounded down.
+check('nectar 5/3/0', forest([5, 3, 0]), [5, 2, 0]);
+check('nectar 2-player second scores', forest([4, 1]), [5, 2]);
+check('nectar two tied first split', forest([3, 3, 1]), [3, 3, 0]);
+check('nectar three tied first', forest([3, 3, 3]), [2, 2, 2]);
+check('nectar tie for second splits 2+0', forest([5, 3, 3]), [5, 1, 1]);
+check('nectar zeros never score', forest([0, 0, 0]), [0, 0, 0]);
+check('flock nectar friendly ties', forest([3, 3, 1], 'asia-flock-oceania'), [5, 5, 2]);
 
-// Asia Flock: friendly ties keep second place available.
-check('flock: two tied first keep 5', forest([3, 3, 1], 'asia-flock-oceania'), [5, 5, 2]);
+// End-of-round goals, official table with tie splitting.
+const goalPoints = (placements: number[], round: number, profileId = 'base') => {
+  const players = placements.map((place) => ({
+    scores: { [`goalR${round}`]: place } as Record<string, number | null>,
+  }));
+  const { perPlayer } = computeGame(profileId, players);
+  return perPlayer.map((points) => points.endOfRoundGoals);
+};
+check('round goal placements 1/2/3', goalPoints([1, 2, 3], 1), [4, 1, 0]);
+check('round goal two tied first split 4+1', goalPoints([1, 1], 1), [2, 2]);
+check('round goal one first, two tied second', goalPoints([1, 2, 2], 1), [4, 0, 0]);
+check('round goal three tied first round 4', goalPoints([1, 1, 1], 4), [4, 4, 4]);
+check('round goal none scores 0', goalPoints([0, 0], 1), [0, 0]);
+
+// Base total: bird/bonus/egg/food/tuck plus goals 4+5+6+7.
+const baseTotal = computeGame('base', [
+  {
+    scores: {
+      birds: 30,
+      bonusCards: 5,
+      eggs: 12,
+      cachedFood: 3,
+      tuckedCards: 4,
+      goalR1: 1,
+      goalR2: 1,
+      goalR3: 1,
+      goalR4: 1,
+    },
+  },
+]);
+check('base total', baseTotal.totals, [76]);
+
+// Americas signed hummingbird track.
+check(
+  'signed hummingbird subtracts',
+  computeGame('americas', [{ scores: { birds: 50, hummingbirdTrack: -3 } }]).totals,
+  [47],
+);
 
 // Unused food breaks a tie for the win.
-const basePlayers = [
-  { scores: { birds: 50, [TIEBREAK_KEY]: 1 } as Record<string, number | null> },
-  { scores: { birds: 50, [TIEBREAK_KEY]: 4 } as Record<string, number | null> },
-  { scores: { birds: 40, [TIEBREAK_KEY]: 9 } as Record<string, number | null> },
-];
-const baseResult = computeGame('base', basePlayers);
-check('tiebreak: higher unused food wins', baseResult.winners, [1]);
-
-const sharedPlayers = [
-  { scores: { birds: 50, [TIEBREAK_KEY]: 2 } as Record<string, number | null> },
-  { scores: { birds: 50, [TIEBREAK_KEY]: 2 } as Record<string, number | null> },
-];
-check('tiebreak: still tied shares the win', computeGame('base', sharedPlayers).winners, [0, 1]);
-
-// Base total is the sum of its categories.
-const baseTotal = computeGame('base', [
-  { scores: { birds: 30, bonusCards: 5, endOfRoundGoals: 7, eggs: 12, cachedFood: 3, tuckedCards: 4 } },
-]);
-check('base total', baseTotal.totals, [61]);
+check(
+  'tiebreak: higher unused food wins',
+  computeGame('base', [
+    { scores: { birds: 50, [TIEBREAK_KEY]: 1 } as Record<string, number | null> },
+    { scores: { birds: 50, [TIEBREAK_KEY]: 4 } as Record<string, number | null> },
+    { scores: { birds: 40, [TIEBREAK_KEY]: 9 } as Record<string, number | null> },
+  ]).winners,
+  [1],
+);
+check(
+  'tiebreak: still tied shares the win',
+  computeGame('base', [
+    { scores: { birds: 50, [TIEBREAK_KEY]: 2 } as Record<string, number | null> },
+    { scores: { birds: 50, [TIEBREAK_KEY]: 2 } as Record<string, number | null> },
+  ]).winners,
+  [0, 1],
+);
 
 if (failures > 0) {
   console.error(`\n${failures} test(s) failed.`);

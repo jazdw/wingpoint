@@ -1,5 +1,14 @@
 import { Hono } from 'hono';
-import { computeGame, DEFAULT_PROFILE_ID, fieldKeys, getProfile, PROFILES, TIEBREAK_KEY } from '../shared/scoring';
+import {
+  computeGame,
+  DEFAULT_PROFILE_ID,
+  GOAL_ROUNDS,
+  goalRoundKey,
+  getProfile,
+  nectarKey,
+  PROFILES,
+  TIEBREAK_KEY,
+} from '../shared/scoring';
 import type { Game, GameMode, GamePlayer, GameStatus, GameSummary, ScoreMap } from '../shared/types';
 import { requireAuth } from './auth';
 import type { AppEnv, Env } from './env';
@@ -127,7 +136,7 @@ export async function loadGame(env: Env, id: string): Promise<Game | null> {
 
 const MODES: GameMode[] = ['competitive', 'solo', 'coop'];
 const STATUSES: GameStatus[] = ['in_progress', 'completed'];
-const KNOWN_EXPANSIONS = new Set(['base', 'european', 'oceania', 'asia']);
+const KNOWN_EXPANSIONS = new Set(['base', 'european', 'oceania', 'asia', 'americas']);
 
 interface PlayerInput {
   id?: string;
@@ -143,19 +152,37 @@ export function isValidProfile(id: unknown): id is string {
 function sanitizeScores(profileId: string, scores: ScoreMap | undefined): ScoreMap {
   const profile = getProfile(profileId);
   const clean: ScoreMap = {};
-  for (const key of fieldKeys(profile)) {
-    const raw = scores?.[key];
-    if (typeof raw === 'number' && Number.isFinite(raw)) {
-      clean[key] = Math.max(0, Math.round(raw));
-    } else {
+
+  const put = (key: string, raw: number | null | undefined, signed = false, max?: number) => {
+    if (typeof raw !== 'number' || !Number.isFinite(raw)) {
       clean[key] = null;
+      return;
+    }
+    let value = Math.round(raw);
+    if (!signed) {
+      value = Math.max(0, value);
+      if (max !== undefined) value = Math.min(max, value);
+    }
+    clean[key] = value;
+  };
+
+  for (const category of profile.categories) {
+    if (category.kind === 'nectar' && category.habitats) {
+      for (const habitat of category.habitats) {
+        const key = nectarKey(habitat.id);
+        put(key, scores?.[key]);
+      }
+    } else if (category.kind === 'roundGoals') {
+      for (let round = 1; round <= GOAL_ROUNDS; round += 1) {
+        const key = goalRoundKey(round);
+        put(key, scores?.[key], false, 3);
+      }
+    } else {
+      put(category.id, scores?.[category.id], category.kind === 'signed');
     }
   }
-  const tiebreak = scores?.[TIEBREAK_KEY];
-  clean[TIEBREAK_KEY] =
-    typeof tiebreak === 'number' && Number.isFinite(tiebreak)
-      ? Math.max(0, Math.round(tiebreak))
-      : null;
+
+  put(TIEBREAK_KEY, scores?.[TIEBREAK_KEY]);
   return clean;
 }
 
