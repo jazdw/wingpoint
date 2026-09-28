@@ -14,8 +14,8 @@ export interface LocalGameInput {
   status?: GameStatus;
 }
 
-export function isLocalGameId(id: string): boolean {
-  return id.startsWith(LOCAL_PREFIX);
+export function isLocalGameId(id: string | null | undefined): boolean {
+  return typeof id === 'string' && id.startsWith(LOCAL_PREFIX);
 }
 
 function readAll(): Game[] {

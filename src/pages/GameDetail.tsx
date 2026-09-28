@@ -118,7 +118,9 @@ export function GameDetail() {
     if (!serverGame || initialised.current) return;
     // Prefer an unsaved local draft (offline edits) over the server copy.
     const cachedDraft = readDraft(draftKey);
-    setDraft(cachedDraft ?? serverGame);
+    // Merge onto the server copy so older drafts (which lacked id/ownerId) still
+    // load and can be recovered.
+    setDraft(cachedDraft ? { ...serverGame, ...cachedDraft, id } : serverGame);
     lastSaved.current = JSON.stringify(toPayload(serverGame));
     if (cachedDraft) setSaveState('offline');
     initialised.current = true;
@@ -130,7 +132,7 @@ export function GameDetail() {
     if (serverGame || draft || !gameQuery.isError) return;
     const cachedDraft = readDraft(draftKey);
     if (cachedDraft) {
-      setDraft(cachedDraft);
+      setDraft({ ...cachedDraft, id });
       lastSaved.current = '';
       setSaveState('offline');
       initialised.current = true;
