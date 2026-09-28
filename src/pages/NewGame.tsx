@@ -10,7 +10,6 @@ import {
   validateConfig,
 } from '../../shared/scoring';
 import type { Game, GoalBoard, PublicUser } from '../../shared/types';
-import { fromDateInput, toDateInput } from '../lib/format';
 
 interface DraftPlayer {
   id: string;
@@ -28,7 +27,6 @@ export function NewGame() {
     queryFn: () => api<{ users: PublicUser[] }>('/api/users'),
   });
 
-  const [playedAt, setPlayedAt] = useState(() => Date.now());
   const [expansions, setExpansions] = useState<string[]>([]);
   const [goalBoard, setGoalBoard] = useState<GoalBoard>('green');
   const [players, setPlayers] = useState<DraftPlayer[]>([
@@ -95,7 +93,6 @@ export function NewGame() {
       return;
     }
     create.mutate({
-      playedAt,
       coreSets: config.coreSets,
       expansions: config.expansions,
       goalBoard: config.goalBoard,
@@ -118,15 +115,6 @@ export function NewGame() {
       </div>
 
       <div className="card stack-sm">
-        <label className="field">
-          <span>Date</span>
-          <input
-            type="date"
-            value={toDateInput(playedAt)}
-            onChange={(event) => setPlayedAt(fromDateInput(event.target.value))}
-          />
-        </label>
-
         <div className="setup-row">
           <span className="setup-label">Expansions</span>
           <div className="chip-list">
