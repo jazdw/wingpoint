@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 
 const MESSAGES: Record<string, string> = {
@@ -13,6 +14,24 @@ const MESSAGES: Record<string, string> = {
 export function Login() {
   const [params] = useSearchParams();
   const error = params.get('auth');
+  const [devBusy, setDevBusy] = useState(false);
+  const [devError, setDevError] = useState<string | null>(null);
+
+  async function signInDev() {
+    setDevBusy(true);
+    setDevError(null);
+    try {
+      const response = await fetch('/api/auth/dev', { credentials: 'same-origin' });
+      if (!response.ok) {
+        const body = (await response.json().catch(() => ({}))) as { error?: string };
+        throw new Error(body.error ?? `Dev sign-in failed (${response.status})`);
+      }
+      window.location.href = '/';
+    } catch (caught) {
+      setDevError(caught instanceof Error ? caught.message : 'Dev sign-in failed');
+      setDevBusy(false);
+    }
+  }
 
   return (
     <div className="login-page">
@@ -29,12 +48,13 @@ export function Login() {
         </a>
         {import.meta.env.DEV && (
           <>
-            <a className="link" href="/api/auth/dev">
-              Dev sign in (localhost only)
-            </a>
+            <button type="button" className="link" onClick={() => void signInDev()} disabled={devBusy}>
+              {devBusy ? 'Signing in…' : 'Dev sign in (localhost only)'}
+            </button>
             <p className="fine-print">Requires DEV_LOGIN_EMAIL in .dev.vars.</p>
           </>
         )}
+        {devError && <p className="alert alert-error">{devError}</p>}
         <p className="fine-print">Only allow-listed Google accounts can sign in.</p>
       </div>
     </div>
