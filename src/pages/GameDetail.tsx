@@ -12,7 +12,7 @@ import {
   normalizeConfig,
   SELECTABLE_EXPANSIONS,
 } from '../../shared/scoring';
-import type { Game, GameConfig } from '../../shared/types';
+import type { Game, GameConfig, PublicUser } from '../../shared/types';
 import { formatDateTime, fromDateInput, toDateInput } from '../lib/format';
 
 type SaveState = 'saved' | 'saving' | 'offline' | 'error';
@@ -71,6 +71,12 @@ export function GameDetail() {
   const { user } = useAuth();
   const isLocal = isLocalGameId(id);
   const draftKey = `wp-draft-${id}`;
+
+  const friendsQuery = useQuery({
+    queryKey: ['users'],
+    queryFn: () => api<{ users: PublicUser[] }>('/api/users'),
+    enabled: Boolean(user) && !isLocal,
+  });
 
   const gameQuery = useQuery({
     queryKey: ['game', id],
@@ -250,6 +256,7 @@ export function GameDetail() {
   const config = gameConfig(game);
   const profile = deriveProfile(config);
   const ownerName = game.ownerName;
+  const friendIds = new Set((friendsQuery.data?.users ?? []).map((friend) => friend.id));
 
   function update(partial: Partial<Game>) {
     if (readOnly) return;
@@ -385,6 +392,7 @@ export function GameDetail() {
           profile={profile}
           players={game.players as EditablePlayer[]}
           onChange={(players) => update({ players })}
+          knownUserIds={friendIds}
           readOnly={readOnly || isInvited}
         />
         {!readOnly && (

@@ -5,12 +5,20 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import { listGames } from '../lib/gameService';
 import { deriveProfile, normalizeConfig } from '../../shared/scoring';
-import type { GameSummary, Stats } from '../../shared/types';
+import type { GameSummary, PublicUser, Stats } from '../../shared/types';
 import { formatDate } from '../lib/format';
 
 const RECENT_LIMIT = 12;
 
-function GameCard({ game, currentUserId }: { game: GameSummary; currentUserId?: string }) {
+function GameCard({
+  game,
+  currentUserId,
+  knownUserIds,
+}: {
+  game: GameSummary;
+  currentUserId?: string;
+  knownUserIds?: Set<string>;
+}) {
   const players = [...game.players].sort((a, b) => b.total - a.total);
   const winnerIds = new Set(game.winners);
   const profileName = deriveProfile(
@@ -50,7 +58,8 @@ function GameCard({ game, currentUserId }: { game: GameSummary; currentUserId?: 
           <li key={player.id} className={winnerIds.has(player.id) ? 'winner' : ''}>
             <span className="pname">
               {winnerIds.has(player.id) && <span aria-hidden="true">🏆 </span>}
-              {player.status === 'pending'
+              {player.status === 'pending' &&
+              !(player.userId && knownUserIds?.has(player.userId))
                 ? (player.email ?? 'Invited player')
                 : player.name}
               {player.status === 'pending' && <span className="muted"> (invited)</span>}
@@ -94,6 +103,12 @@ export function Dashboard() {
     queryFn: () => api<{ stats: Stats }>('/api/stats'),
     enabled: Boolean(user),
   });
+  const friendsQuery = useQuery({
+    queryKey: ['users'],
+    queryFn: () => api<{ users: PublicUser[] }>('/api/users'),
+    enabled: Boolean(user),
+  });
+  const friendIds = new Set((friendsQuery.data?.users ?? []).map((friend) => friend.id));
 
   const stats = statsQuery.data?.stats;
   const games = gamesQuery.data ?? [];
@@ -218,7 +233,12 @@ export function Dashboard() {
           </div>
           <div className="game-list">
             {activeGames.map((game) => (
-              <GameCard key={game.id} game={game} currentUserId={user?.id} />
+              <GameCard
+                key={game.id}
+                game={game}
+                currentUserId={user?.id}
+                knownUserIds={friendIds}
+              />
             ))}
           </div>
         </section>
@@ -245,7 +265,12 @@ export function Dashboard() {
           </div>
           <div className="game-list">
             {visibleRecent.map((game) => (
-              <GameCard key={game.id} game={game} currentUserId={user?.id} />
+              <GameCard
+                key={game.id}
+                game={game}
+                currentUserId={user?.id}
+                knownUserIds={friendIds}
+              />
             ))}
           </div>
         </section>

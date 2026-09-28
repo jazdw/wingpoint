@@ -25,6 +25,8 @@ interface ScoreSheetProps {
   profile: ScoringProfile;
   players: EditablePlayer[];
   onChange: (players: EditablePlayer[]) => void;
+  /** Friends of the viewer: their names are shown even while pending. */
+  knownUserIds?: Set<string>;
   readOnly?: boolean;
 }
 
@@ -33,7 +35,13 @@ function placementOf(value: number | null | undefined): number {
   return numeric >= 0 && numeric <= 3 ? numeric : 0;
 }
 
-export function ScoreSheet({ profile, players, onChange, readOnly = false }: ScoreSheetProps) {
+export function ScoreSheet({
+  profile,
+  players,
+  onChange,
+  knownUserIds,
+  readOnly = false,
+}: ScoreSheetProps) {
   const computed = computeGame(profile, players);
   const winnerSet = new Set(computed.winners);
 
@@ -57,7 +65,8 @@ export function ScoreSheet({ profile, players, onChange, readOnly = false }: Sco
               <th key={player.id} scope="col" className={winnerSet.has(index) ? 'winner' : ''}>
                 <div className="player-head">
                   <span className="player-name">
-                    {player.status === 'pending'
+                    {player.status === 'pending' &&
+                    !(player.userId && knownUserIds?.has(player.userId))
                       ? (player.email ?? 'Invited player')
                       : player.name}
                   </span>
