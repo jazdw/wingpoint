@@ -186,7 +186,9 @@ export function GameDetail() {
     );
   }
 
-  const game = readOnly && serverGame ? serverGame : draft!;
+  // Prefer the editable draft, but fall back to the server copy on the first
+  // render after load (before the sync effect has populated the draft).
+  const game = (draft ?? serverGame)!;
   const config = gameConfig(game);
   const profile = deriveProfile(config);
   const validation = validateConfig(config, game.players.length);
