@@ -10,6 +10,7 @@ import {
   validateConfig,
 } from '../../shared/scoring';
 import type { Game, GoalBoard, PublicUser } from '../../shared/types';
+import { newId } from '../lib/id';
 
 interface DraftPlayer {
   id: string;
@@ -30,7 +31,7 @@ export function NewGame() {
   const [expansions, setExpansions] = useState<string[]>([]);
   const [goalBoard, setGoalBoard] = useState<GoalBoard>('green');
   const [players, setPlayers] = useState<DraftPlayer[]>([
-    { id: crypto.randomUUID(), name: user?.name ?? 'Player 1', userId: user?.id ?? null },
+    { id: newId(), name: user?.name ?? 'Player 1', userId: user?.id ?? null },
   ]);
   const [error, setError] = useState<string | null>(null);
 
@@ -66,7 +67,7 @@ export function NewGame() {
   function addPlayer() {
     setPlayers((prev) => [
       ...prev,
-      { id: crypto.randomUUID(), name: `Player ${prev.length + 1}`, userId: null },
+      { id: newId(), name: `Player ${prev.length + 1}`, userId: null },
     ]);
   }
 

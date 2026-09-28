@@ -15,6 +15,7 @@ import {
 } from '../../shared/scoring';
 import type { Game, GameConfig, GoalBoard, PublicUser, ScoreMap } from '../../shared/types';
 import { formatDateTime, fromDateInput, toDateInput } from '../lib/format';
+import { newId } from '../lib/id';
 
 type SaveState = 'saved' | 'saving' | 'offline' | 'error';
 
@@ -250,7 +251,7 @@ export function GameDetail() {
         players: [
           ...prev.players,
           {
-            id: crypto.randomUUID(),
+            id: newId(),
             name: `Player ${prev.players.length + 1}`,
             userId: null,
             status: 'accepted',
@@ -295,14 +296,16 @@ export function GameDetail() {
           )}
           {!readOnly && (
             <>
-              <button
-                type="button"
-                className="btn btn-sm"
-                onClick={addPlayer}
-                disabled={game.players.length >= 8}
-              >
-                Add player
-              </button>
+              {game.status === 'in_progress' && (
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={addPlayer}
+                  disabled={game.players.length >= 8}
+                >
+                  Add player
+                </button>
+              )}
               <button
                 type="button"
                 className="btn btn-danger btn-sm"
@@ -401,7 +404,7 @@ export function GameDetail() {
           profile={profile}
           players={game.players as EditablePlayer[]}
           onChange={(players) => update({ players })}
-          onRemovePlayer={removePlayer}
+          onRemovePlayer={game.status === 'in_progress' ? removePlayer : undefined}
           readOnly={readOnly || isInvited}
         />
         {!readOnly && (
