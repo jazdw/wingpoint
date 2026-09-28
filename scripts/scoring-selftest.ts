@@ -1,6 +1,7 @@
 // Quick self-test for the shared scoring engine. Run with:
 //   node --experimental-strip-types scripts/scoring-selftest.ts
 import {
+  checkComplete,
   computeGame,
   deriveProfile,
   normalizeConfig,
@@ -146,6 +147,60 @@ check(
 check(
   'base config is valid',
   validateConfig(normalizeConfig({ coreSets: ['wingspan'], goalBoard: 'blue' }), 4).valid,
+  true,
+);
+
+// Completion checks.
+const completeScores = {
+  birds: 1,
+  bonusCards: 1,
+  goalR1: 1,
+  goalR2: 1,
+  goalR3: 1,
+  goalR4: 1,
+  eggs: 1,
+  cachedFood: 1,
+  tuckedCards: 1,
+};
+const withGoals = (r1: number, r2: number, r3: number, r4: number) => ({
+  ...completeScores,
+  goalR1: r1,
+  goalR2: r2,
+  goalR3: r3,
+  goalR4: r4,
+});
+check(
+  'complete game passes',
+  checkComplete(profile([]), [
+    { name: 'A', scores: withGoals(1, 1, 1, 1) },
+    { name: 'B', scores: withGoals(2, 2, 2, 2) },
+  ]).valid,
+  true,
+);
+check(
+  'missing field fails',
+  checkComplete(profile([]), [
+    { name: 'A', scores: withGoals(1, 1, 1, 1) },
+    { name: 'B', scores: { ...withGoals(2, 2, 2, 2), eggs: null } },
+  ]).valid,
+  false,
+);
+check(
+  'inconsistent green placement fails',
+  checkComplete(profile([]), [
+    { name: 'A', scores: withGoals(1, 1, 1, 1) },
+    { name: 'B', scores: withGoals(1, 1, 1, 1) },
+    { name: 'C', scores: withGoals(2, 2, 2, 2) },
+  ]).valid,
+  false,
+);
+check(
+  'tie then skip passes',
+  checkComplete(profile([]), [
+    { name: 'A', scores: withGoals(1, 1, 1, 1) },
+    { name: 'B', scores: withGoals(1, 1, 1, 1) },
+    { name: 'C', scores: withGoals(3, 3, 3, 3) },
+  ]).valid,
   true,
 );
 

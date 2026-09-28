@@ -7,19 +7,13 @@ import { ScoreSheet, type EditablePlayer } from '../components/ScoreSheet';
 import { deleteGame, gamePayload as toPayload, getGame, persistGame } from '../lib/gameService';
 import { isLocalGameId } from '../lib/localGames';
 import {
+  checkComplete,
   deriveProfile,
-  emptyScores,
-  fieldKeys,
-  GOAL_ROUNDS,
-  goalRoundKey,
   normalizeConfig,
   SELECTABLE_EXPANSIONS,
-  TIEBREAK_KEY,
-  validateConfig,
 } from '../../shared/scoring';
-import type { Game, GameConfig, GoalBoard, PublicUser, ScoreMap } from '../../shared/types';
+import type { Game, GameConfig, PublicUser } from '../../shared/types';
 import { formatDateTime, fromDateInput, toDateInput } from '../lib/format';
-import { newId } from '../lib/id';
 
 type SaveState = 'saved' | 'saving' | 'offline' | 'error';
 
@@ -98,6 +92,7 @@ export function GameDetail() {
   const [draft, setDraft] = useState<Game | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [completeError, setCompleteError] = useState<string | null>(null);
   const lastSaved = useRef('');
   const initialised = useRef(false);
 
@@ -227,7 +222,6 @@ export function GameDetail() {
   const game = (readOnly && serverGame ? serverGame : (draft ?? serverGame))!;
   const config = gameConfig(game);
   const profile = deriveProfile(config);
-  const validation = validateConfig(config, game.players.length);
   const ownerName = usersQuery.data?.users.find((account) => account.id === game.ownerId)?.name;
 
   function update(partial: Partial<Game>) {
@@ -235,91 +229,17 @@ export function GameDetail() {
     setDraft((prev) => (prev ? { ...prev, ...partial } : prev));
   }
 
-  function changeConfig(patch: Partial<GameConfig>) {
-    if (readOnly) return;
-    setDraft((prev) => {
-      if (!prev) return prev;
-      const nextConfig = normalizeConfig({
-        coreSets: patch.coreSets ?? prev.coreSets,
-        expansions: patch.expansions ?? prev.expansions,
-        goalBoard: patch.goalBoard ?? prev.goalBoard,
-      });
-      const nextProfile = deriveProfile(nextConfig);
-      const keys = fieldKeys(nextProfile);
-      const boardChanged = nextConfig.goalBoard !== prev.goalBoard;
-      const players = prev.players.map((player) => {
-        const scores: ScoreMap = {};
-        for (const key of keys) {
-          scores[key] =
-            boardChanged && key.startsWith('goalR')
-              ? null
-              : typeof player.scores[key] === 'number'
-                ? player.scores[key]
-                : null;
-        }
-        scores[TIEBREAK_KEY] =
-          typeof player.scores[TIEBREAK_KEY] === 'number' ? player.scores[TIEBREAK_KEY] : null;
-        return { ...player, scores };
-      });
-      return {
-        ...prev,
-        coreSets: nextConfig.coreSets,
-        expansions: nextConfig.expansions,
-        goalBoard: nextConfig.goalBoard,
-        players,
-      };
-    });
-  }
-
-  function toggleExpansion(expansionId: string) {
-    const next = config.expansions.includes(expansionId)
-      ? config.expansions.filter((value) => value !== expansionId)
-      : [...config.expansions, expansionId];
-    changeConfig({ expansions: next });
-  }
-
-  function addPlayer() {
-    if (readOnly) return;
-    setDraft((prev) => {
-      if (!prev) return prev;
-      return {
-        ...prev,
-        players: [
-          ...prev.players,
-          {
-            id: newId(),
-            name: `Player ${prev.players.length + 1}`,
-            userId: null,
-            status: 'accepted',
-            scores: emptyScores(deriveProfile(gameConfig(prev))),
-          },
-        ],
-      };
-    });
-  }
-
-  function removePlayer(index: number) {
-    if (readOnly) return;
-    setDraft((prev) => {
-      if (!prev) return prev;
-      const players = prev.players.filter((_, i) => i !== index);
-      const profile = deriveProfile(gameConfig(prev));
-      const maxPlace = Math.min(3, players.length);
-      // A 3rd-place goal no longer exists when the game drops to 2 players.
-      const adjusted =
-        profile.goalBoard === 'green' && maxPlace < 3
-          ? players.map((player) => {
-              const scores = { ...player.scores };
-              for (let round = 1; round <= GOAL_ROUNDS; round += 1) {
-                const key = goalRoundKey(round);
-                const value = scores[key];
-                if (typeof value === 'number' && value > maxPlace) scores[key] = null;
-              }
-              return { ...player, scores };
-            })
-          : players;
-      return { ...prev, players: adjusted };
-    });
+  function completeGame() {
+    const check = checkComplete(
+      profile,
+      game.players.map((player) => ({ name: player.name, scores: player.scores })),
+    );
+    if (!check.valid) {
+      setCompleteError(check.error ?? 'The game is not ready to complete.');
+      return;
+    }
+    setCompleteError(null);
+    update({ status: 'completed' });
   }
 
   return (
@@ -342,16 +262,6 @@ export function GameDetail() {
           )}
           {!readOnly && (
             <>
-              {game.status === 'in_progress' && (
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  onClick={addPlayer}
-                  disabled={game.players.length >= 8}
-                >
-                  Add player
-                </button>
-              )}
               <button
                 type="button"
                 className="btn btn-danger btn-sm"
@@ -422,38 +332,25 @@ export function GameDetail() {
         <div className="setup-row">
           <span className="setup-label">Expansions</span>
           <div className="chip-list">
-            {SELECTABLE_EXPANSIONS.map((expansion) => (
-              <button
-                key={expansion.id}
-                type="button"
-                className={`chip${config.expansions.includes(expansion.id) ? ' chip-on' : ''}`}
-                disabled={readOnly}
-                onClick={() => toggleExpansion(expansion.id)}
-              >
+            <span className="chip chip-static">Base</span>
+            {SELECTABLE_EXPANSIONS.filter((expansion) =>
+              config.expansions.includes(expansion.id),
+            ).map((expansion) => (
+              <span key={expansion.id} className="chip chip-static">
                 {expansion.short}
-              </button>
+              </span>
             ))}
           </div>
         </div>
 
         <div className="setup-row">
           <span className="setup-label">Goal board</span>
-          <div className="segmented">
-            {(['green', 'blue'] as GoalBoard[]).map((board) => (
-              <button
-                key={board}
-                type="button"
-                className={config.goalBoard === board ? 'active' : ''}
-                disabled={readOnly}
-                onClick={() => changeConfig({ goalBoard: board })}
-              >
-                {board === 'green' ? 'Green (majority)' : 'Blue (per item)'}
-              </button>
-            ))}
-          </div>
+          <span className="badge">
+            {config.goalBoard === 'green' ? 'Green (majority)' : 'Blue (per item)'}
+          </span>
         </div>
 
-        {!validation.valid && <p className="alert alert-error">{validation.error}</p>}
+        <p className="fine-print">The setup and players are fixed when the game is created.</p>
       </div>
 
       <div className={`score-block${readOnly ? '' : ' has-actions'}`}>
@@ -461,18 +358,13 @@ export function GameDetail() {
           profile={profile}
           players={game.players as EditablePlayer[]}
           onChange={(players) => update({ players })}
-          onRemovePlayer={game.status === 'in_progress' ? removePlayer : undefined}
           readOnly={readOnly || isInvited}
         />
         {!readOnly && (
           <div className="score-actions">
             {game.status === 'in_progress' ? (
               <>
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => update({ status: 'completed' })}
-                >
+                <button type="button" className="btn btn-primary" onClick={completeGame}>
                   Complete game
                 </button>
                 <button
@@ -495,6 +387,7 @@ export function GameDetail() {
           </div>
         )}
       </div>
+      {completeError && <p className="alert alert-error">{completeError}</p>}
 
       <label className="field">
         <span>Notes</span>

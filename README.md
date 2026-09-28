@@ -20,7 +20,9 @@ front end, Google sign-in (allow-list only) and offline support.
   editing an in-progress game offline; changes sync when you reconnect.
 - **Complete or cancel** — mark a game **completed** to count it in stats, or
   **cancel** it to abandon it without deleting. Cancelled games stay in your list
-  (marked Cancelled), and are excluded from stats.
+  (marked Cancelled), and are excluded from stats. A game can only be completed
+  once **every score is filled in** and the green goal placements are consistent;
+  the **setup (expansions, goal board) and players are fixed at creation**.
 - **Live viewing** — linked players watch a game update live from their own
   login; only the score master (the game owner) can edit.
 - **Stats across games** — wins, averages, category breakdowns, results by

@@ -285,6 +285,72 @@ export function validateConfig(
   return { valid: true };
 }
 
+/**
+ * Checks that a game can be completed: every score field is filled in and the
+ * green end-of-round goal placements form a valid ranking.
+ */
+export function checkComplete(
+  profile: ScoringProfile,
+  players: { name: string; scores: ScoreMap }[],
+): ConfigValidation {
+  const keys = fieldKeys(profile);
+  const missing: string[] = [];
+  for (const player of players) {
+    for (const key of keys) {
+      if (typeof player.scores[key] !== 'number') {
+        missing.push(`${player.name}: ${fieldLabel(profile, key)}`);
+      }
+    }
+  }
+  if (missing.length > 0) {
+    const shown = missing.slice(0, 4).join(', ');
+    const more = missing.length > 4 ? ` (+${missing.length - 4} more)` : '';
+    return { valid: false, error: `Fill in every score before completing. Missing — ${shown}${more}.` };
+  }
+
+  if (profile.goalBoard === 'green') {
+    for (let round = 1; round <= GOAL_ROUNDS; round += 1) {
+      const key = goalRoundKey(round);
+      const places = players
+        .map((player) => Math.round(Number(player.scores[key] ?? 0)))
+        .filter((place) => place >= 1 && place <= 3)
+        .sort((a, b) => a - b);
+      let expected = 1;
+      let index = 0;
+      while (index < places.length) {
+        const place = places[index];
+        let count = 0;
+        while (index < places.length && places[index] === place) {
+          count += 1;
+          index += 1;
+        }
+        if (place !== expected) {
+          return {
+            valid: false,
+            error: `Round ${round} goal placements are inconsistent — a place is missing.`,
+          };
+        }
+        expected += count;
+      }
+    }
+  }
+
+  return { valid: true };
+}
+
+function fieldLabel(profile: ScoringProfile, key: string): string {
+  if (key.startsWith('nectar_')) {
+    const habitat = key.slice('nectar_'.length);
+    return (
+      profile.categories
+        .find((category) => category.kind === 'nectar')
+        ?.habitats?.find((item) => item.id === habitat)?.label ?? key
+    );
+  }
+  if (key.startsWith('goalR')) return `Round ${key.slice('goalR'.length)} goal`;
+  return profile.categories.find((category) => category.id === key)?.label ?? key;
+}
+
 /* ------------------------------------------------------------------ */
 /* Raw input keys                                                      */
 /* ------------------------------------------------------------------ */

@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import {
+  checkComplete,
   computeGame,
   deriveProfile,
   GOAL_ROUNDS,
@@ -324,6 +325,48 @@ async function writePlayers(
   await env.DB.batch(statements);
 }
 
+/** The roster is fixed after creation: same players, order, names and accounts. */
+function sameRoster(existing: PlayerRow[], inputs: PlayerInput[]): boolean {
+  if (existing.length !== inputs.length) return false;
+  return existing.every((row, index) => {
+    const input = inputs[index];
+    return (
+      input.id === row.id &&
+      input.name === row.name &&
+      (input.userId ?? null) === row.user_id
+    );
+  });
+}
+
+/** Update only the scores/points/total of existing players. */
+async function updatePlayerScores(
+  env: Env,
+  gameId: string,
+  profile: ScoringProfile,
+  inputs: PlayerInput[],
+): Promise<void> {
+  const computed = computeGame(
+    profile,
+    inputs.map((player) => ({ scores: player.scores ?? {} })),
+  );
+  const now = Date.now();
+  const statements = inputs.map((input, index) =>
+    env.DB.prepare(
+      `UPDATE game_players
+          SET scores = ?, points = ?, total = ?, updated_at = ?
+        WHERE id = ? AND game_id = ?`,
+    ).bind(
+      JSON.stringify(input.scores ?? {}),
+      JSON.stringify(computed.perPlayer[index] ?? {}),
+      computed.totals[index] ?? 0,
+      now,
+      input.id,
+      gameId,
+    ),
+  );
+  if (statements.length > 0) await env.DB.batch(statements);
+}
+
 function configFromBody(body: Record<string, unknown>): GameConfig {
   return normalizeConfig({
     coreSets: Array.isArray(body.coreSets) ? (body.coreSets as CoreSet[]) : undefined,
@@ -434,14 +477,11 @@ gameRoutes.patch('/:id', async (c) => {
   const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body) return c.json({ error: 'Invalid JSON body.' }, 400);
 
-  const config =
-    body.coreSets !== undefined ||
-    body.expansions !== undefined ||
-    body.goalBoard !== undefined
-      ? configFromBody(body)
-      : configForGame(existing);
-  const profile = deriveProfile(config);
-  const configChanged = profile.id !== profileForGame(existing).id;
+  // The setup (sets, expansions, goal board) is fixed when the game is created.
+  if (body.coreSets !== undefined || body.expansions !== undefined || body.goalBoard !== undefined) {
+    return c.json({ error: 'Game setup cannot be changed after the game is created.' }, 400);
+  }
+  const profile = profileForGame(existing);
 
   const status = STATUSES.includes(body.status as GameStatus)
     ? (body.status as GameStatus)
@@ -452,62 +492,38 @@ gameRoutes.patch('/:id', async (c) => {
       : existing.played_at;
   const notes = typeof body.notes === 'string' ? body.notes.slice(0, 2000) : existing.notes;
 
+  const existingRows = await loadPlayerRows(c.env, id);
   let inputs: PlayerInput[] | null = null;
   if (body.players !== undefined) {
     inputs = normalizePlayers(profile, body.players);
     if (!inputs) {
       return c.json({ error: 'A game needs 1–8 named players, each account only once.' }, 400);
     }
-  }
-
-  const playerCount =
-    inputs?.length ??
-    (await c.env.DB.prepare('SELECT COUNT(*) AS count FROM game_players WHERE game_id = ?')
-      .bind(id)
-      .first<{ count: number }>())?.count ??
-    0;
-  const validation = validateConfig(config, playerCount);
-  if (!validation.valid) return c.json({ error: validation.error }, 400);
-  if (inputs) {
+    if (!sameRoster(existingRows, inputs)) {
+      return c.json({ error: 'Players cannot be changed after the game is created.' }, 400);
+    }
     const scoreError = validateScores(profile, inputs, inputs.length);
     if (scoreError) return c.json({ error: scoreError }, 400);
   }
 
+  if (status === 'completed') {
+    const scoresForCheck = (
+      inputs ??
+      existingRows.map((row) => ({ name: row.name, scores: parseJson<ScoreMap>(row.scores, {}) }))
+    ).map((player) => ({ name: player.name, scores: player.scores ?? {} }));
+    const complete = checkComplete(profile, scoresForCheck);
+    if (!complete.valid) return c.json({ error: complete.error }, 400);
+  }
+
   const now = Date.now();
   await c.env.DB.prepare(
-    `UPDATE games
-        SET played_at = ?, status = ?, core_sets = ?, expansions = ?, goal_board = ?,
-            notes = ?, updated_at = ?
-      WHERE id = ?`,
+    `UPDATE games SET played_at = ?, status = ?, notes = ?, updated_at = ? WHERE id = ?`,
   )
-    .bind(
-      playedAt,
-      status,
-      JSON.stringify(config.coreSets),
-      JSON.stringify(config.expansions),
-      config.goalBoard,
-      notes,
-      now,
-      id,
-    )
+    .bind(playedAt, status, notes, now, id)
     .run();
 
   if (inputs) {
-    await writePlayers(c.env, id, profile, existing.owner_id, inputs);
-  } else if (configChanged) {
-    const rows = await loadPlayerRows(c.env, id);
-    await writePlayers(
-      c.env,
-      id,
-      profile,
-      existing.owner_id,
-      rows.map((row) => ({
-        id: row.id,
-        name: row.name,
-        userId: row.user_id,
-        scores: parseJson<ScoreMap>(row.scores, {}),
-      })),
-    );
+    await updatePlayerScores(c.env, id, profile, inputs);
   }
 
   const game = await loadGame(c.env, id);

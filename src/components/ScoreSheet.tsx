@@ -24,7 +24,6 @@ interface ScoreSheetProps {
   profile: ScoringProfile;
   players: EditablePlayer[];
   onChange: (players: EditablePlayer[]) => void;
-  onRemovePlayer?: (index: number) => void;
   readOnly?: boolean;
 }
 
@@ -33,13 +32,7 @@ function placementOf(value: number | null | undefined): number {
   return numeric >= 0 && numeric <= 3 ? numeric : 0;
 }
 
-export function ScoreSheet({
-  profile,
-  players,
-  onChange,
-  onRemovePlayer,
-  readOnly = false,
-}: ScoreSheetProps) {
+export function ScoreSheet({ profile, players, onChange, readOnly = false }: ScoreSheetProps) {
   const computed = computeGame(profile, players);
   const winnerSet = new Set(computed.winners);
 
@@ -49,10 +42,6 @@ export function ScoreSheet({
         index === playerIndex ? { ...player, scores: { ...player.scores, [key]: value } } : player,
       ),
     );
-  }
-
-  function renamePlayer(playerIndex: number, name: string) {
-    onChange(players.map((player, index) => (index === playerIndex ? { ...player, name } : player)));
   }
 
   return (
@@ -66,34 +55,12 @@ export function ScoreSheet({
             {players.map((player, index) => (
               <th key={player.id} scope="col" className={winnerSet.has(index) ? 'winner' : ''}>
                 <div className="player-head">
-                  {readOnly || player.userId ? (
-                    <span className="player-name" title={player.userId ? 'Account display name' : undefined}>
-                      {player.name}
-                    </span>
-                  ) : (
-                    <input
-                      className="player-name-input"
-                      value={player.name}
-                      aria-label={`Player ${index + 1} name`}
-                      onChange={(event) => renamePlayer(index, event.target.value.slice(0, 40))}
-                      onFocus={(event) => event.currentTarget.select()}
-                    />
-                  )}
+                  <span className="player-name">{player.name}</span>
                   {player.status === 'pending' && <span className="badge badge-warn">invited</span>}
                   <div className="player-total-badge">
                     {winnerSet.has(index) && <span aria-label="Winner">🏆</span>}
                     <span>{computed.totals[index] ?? 0}</span>
                   </div>
-                  {!readOnly && onRemovePlayer && players.length > 1 && (
-                    <button
-                      type="button"
-                      className="remove-player"
-                      onClick={() => onRemovePlayer(index)}
-                      aria-label={`Remove ${player.name}`}
-                    >
-                      ×
-                    </button>
-                  )}
                 </div>
               </th>
             ))}
