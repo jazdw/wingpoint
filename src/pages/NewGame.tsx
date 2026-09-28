@@ -148,7 +148,6 @@ export function NewGame() {
           </div>
         </div>
 
-        {!validation.valid && <p className="alert alert-error">{validation.error}</p>}
         <p className="fine-print">{profile.name}</p>
       </div>
 
@@ -219,8 +218,11 @@ export function NewGame() {
         </p>
       </div>
 
-      {(error || hasDuplicateUsers) && (
-        <p className="alert alert-error">{error ?? 'Each account can only be added once.'}</p>
+      {(error || hasDuplicateUsers || !validation.valid) && (
+        <p className="alert alert-error">
+          {error ??
+            (hasDuplicateUsers ? 'Each account can only be added once.' : validation.error)}
+        </p>
       )}
 
       <div className="actions">
