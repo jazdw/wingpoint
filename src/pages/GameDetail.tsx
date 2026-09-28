@@ -78,7 +78,9 @@ export function GameDetail() {
     enabled: Boolean(id),
     refetchInterval: (query) => {
       const game = query.state.data;
-      if (game && game.ownerId !== user?.id && game.status === 'in_progress') return 5000;
+      // Poll while in progress so invite acceptances and live score changes
+      // reach everyone, including the score master.
+      if (game && game.status === 'in_progress') return 5000;
       return false;
     },
   });
@@ -112,6 +114,37 @@ export function GameDetail() {
     if (cachedDraft) setSaveState('offline');
     initialised.current = true;
   }, [serverGame, draftKey]);
+
+  // Keep server-managed player metadata (name/email/status) in sync while the
+  // owner edits, without touching their local score edits.
+  useEffect(() => {
+    if (!serverGame || !initialised.current) return;
+    setDraft((prev) => {
+      if (!prev) return prev;
+      let changed = false;
+      const players = prev.players.map((player) => {
+        const server = serverGame.players.find((candidate) => candidate.id === player.id);
+        if (!server) return player;
+        if (
+          server.status !== player.status ||
+          server.name !== player.name ||
+          (server.email ?? null) !== (player.email ?? null) ||
+          server.userId !== player.userId
+        ) {
+          changed = true;
+          return {
+            ...player,
+            status: server.status,
+            name: server.name,
+            email: server.email ?? null,
+            userId: server.userId,
+          };
+        }
+        return player;
+      });
+      return changed ? { ...prev, players } : prev;
+    });
+  }, [serverGame]);
 
   useEffect(() => {
     // No server copy (offline with no cached response): fall back to the local
