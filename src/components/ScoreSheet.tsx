@@ -38,6 +38,40 @@ function placementOf(value: number | null | undefined): number {
   return numeric >= 0 && numeric <= 3 ? numeric : 0;
 }
 
+/**
+ * The places a player may take, given the other players' places this round.
+ * You can join an existing tie or take the next place, but not a place skipped
+ * by a tie (two tied for 1st means 2nd is not awarded — the next is 3rd).
+ */
+function goalPlaceOptions(others: number[]): number[] {
+  const assigned = others.filter((place) => place >= 1 && place <= 3).sort((a, b) => a - b);
+  if (assigned.length === 0) return [0, 1, 2, 3];
+
+  const groups: { place: number; size: number }[] = [];
+  let index = 0;
+  while (index < assigned.length) {
+    const place = assigned[index];
+    let size = 0;
+    while (index < assigned.length && assigned[index] === place) {
+      size += 1;
+      index += 1;
+    }
+    groups.push({ place, size });
+  }
+
+  let expected = 1;
+  for (const group of groups) {
+    // If the current places aren't a valid ranking prefix, don't restrict.
+    if (group.place !== expected) return [0, 1, 2, 3];
+    expected += group.size;
+  }
+
+  const options = new Set<number>([0]);
+  for (const group of groups) options.add(group.place);
+  if (expected <= 3) options.add(expected);
+  return [...options].sort((a, b) => a - b);
+}
+
 export function ScoreSheet({
   profile,
   players,
@@ -143,7 +177,6 @@ export function ScoreSheet({
 
             if (category.kind === 'roundGoals') {
               const blue = profile.goalBoard === 'blue';
-              const places = GOAL_PLACES.filter((place) => place.value <= Math.min(3, players.length));
               return (
                 <Fragment key={category.id}>
                   <tr className="group-row">
@@ -164,44 +197,57 @@ export function ScoreSheet({
                         Round {round}
                         {blue ? ' count' : ''}
                       </td>
-                      {players.map((player, index) => (
-                        <td key={player.id}>
-                          {blue ? (
-                            <ScoreInput
-                              value={player.scores[goalRoundKey(round)] ?? null}
-                              onChange={(value) => setScore(index, goalRoundKey(round), value)}
-                              disabled={readOnly}
-                              invalid={isInvalid(index, goalRoundKey(round))}
-                              ariaLabel={`${player.name} round ${round} count`}
-                            />
-                          ) : (
-                            <div className="placement-cell">
-                              <select
-                                className={`placement-select${
-                                  isInvalid(index, goalRoundKey(round)) ? ' field-invalid' : ''
-                                }`}
-                                aria-label={`${player.name} round ${round} placement`}
-                                value={placementOf(player.scores[goalRoundKey(round)])}
+                      {players.map((player, index) => {
+                        const key = goalRoundKey(round);
+                        const others = players
+                          .filter((_, otherIndex) => otherIndex !== index)
+                          .map((other) => placementOf(other.scores[key]));
+                        const options = goalPlaceOptions(others);
+                        const current = placementOf(player.scores[key]);
+                        const optionValues = options.includes(current)
+                          ? options
+                          : [...options, current].sort((a, b) => a - b);
+                        return (
+                          <td key={player.id}>
+                            {blue ? (
+                              <ScoreInput
+                                value={player.scores[key] ?? null}
+                                onChange={(value) => setScore(index, key, value)}
                                 disabled={readOnly}
-                                onChange={(event) =>
-                                  setGoalPlacement(index, round, Number(event.target.value))
-                                }
-                              >
-                              <option value={0}>—</option>
-                              {places.map((place) => (
-                                <option key={place.value} value={place.value}>
-                                  {place.label}
-                                </option>
-                              ))}
-                              </select>
-                              <span className="placement-points">
-                                {roundPoints[round - 1][index]}{' '}
-                                {roundPoints[round - 1][index] === 1 ? 'pt' : 'pts'}
-                              </span>
-                            </div>
-                          )}
-                        </td>
-                      ))}
+                                invalid={isInvalid(index, key)}
+                                ariaLabel={`${player.name} round ${round} count`}
+                              />
+                            ) : (
+                              <div className="placement-cell">
+                                <select
+                                  className={`placement-select${
+                                    isInvalid(index, key) ? ' field-invalid' : ''
+                                  }`}
+                                  aria-label={`${player.name} round ${round} placement`}
+                                  value={current}
+                                  disabled={readOnly}
+                                  onChange={(event) =>
+                                    setGoalPlacement(index, round, Number(event.target.value))
+                                  }
+                                >
+                                  {optionValues.map((value) => (
+                                    <option key={value} value={value}>
+                                      {value === 0
+                                        ? '—'
+                                        : (GOAL_PLACES.find((place) => place.value === value)?.label ??
+                                          value)}
+                                    </option>
+                                  ))}
+                                </select>
+                                <span className="placement-points">
+                                  {roundPoints[round - 1][index]}{' '}
+                                  {roundPoints[round - 1][index] === 1 ? 'pt' : 'pts'}
+                                </span>
+                              </div>
+                            )}
+                          </td>
+                        );
+                      })}
                     </tr>
                   ))}
                   <tr className="derived-row">
