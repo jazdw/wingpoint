@@ -159,13 +159,16 @@ npx wrangler d1 migrations apply wingpoint --remote
 
 ## Scoring & expansions
 
-A game is configured from **standalone sets (Wingspan and/or Wingspan Asia) + a
-goal board side (green/blue) + any combination of expansions**. The scoring
-categories are derived from that configuration in `shared/scoring.ts`.
+A game is configured from the **Wingspan base game + a goal board side
+(green/blue) + any combination of expansions**. The scoring categories are
+derived from that configuration in `shared/scoring.ts`.
 
-The Asia **Duet/Flock play modes** remain implemented in the scoring engine and
-stored on each game (`play_mode`), but are intentionally not shown in the UI yet,
-so they can be surfaced again later without a schema change.
+**Wingspan Asia and its Duet/Flock modes are intentionally not selectable yet.**
+They are designed for, not wired up: the scoring engine accepts them through an
+optional, non-persisted `modes` parameter (`deriveProfile(config, ['duet'])`),
+the `duetMap` category is already implemented, and the `core_sets` column is
+reserved for the Asia set. Adding them back later needs no changes to the
+scoring logic — just a UI and (if persisted) a column.
 
 Categories are added to every game as follows:
 
@@ -174,10 +177,10 @@ Categories are added to every game as follows:
 | Birds, Bonus cards, End-of-round goals, Eggs, Cached food, Tucked cards | always |
 | Nectar | Oceania is in play (5 pts first, 2 pts second; ties split evenly) |
 | Hummingbird track | Americas is in play (signed points) |
-| Duet map | Wingspan Asia + Duet mode — engine only, not shown in the UI yet |
+| Duet map | Wingspan Asia + Duet mode (engine-only extension point) |
 
-Invalid configurations (for example Flock without Asia, Duet with other than 2
-players) are rejected with a message.
+When Asia modes are re-enabled, invalid configurations (for example Flock without
+Asia, Duet with other than 2 players) are rejected with a message.
 
 **Green end-of-round goals** are entered per round as a placement
 (1st/2nd/3rd/none) and scored with the official table:

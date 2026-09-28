@@ -7,8 +7,6 @@ export type GameStatus = 'in_progress' | 'completed';
 export type GoalBoard = 'green' | 'blue';
 /** Standalone sets. Wingspan base and/or Wingspan Asia. */
 export type CoreSet = 'wingspan' | 'asia';
-/** Wingspan Asia play modes. Duet needs 2 players, Flock needs 6–7. */
-export type PlayMode = 'standard' | 'duet' | 'flock';
 export type PlayerStatus = 'pending' | 'accepted';
 
 /** Raw scores keyed by score field id (see shared/scoring.ts). */
@@ -20,7 +18,6 @@ export interface GameConfig {
   /** Expansion ids mixed in (European, Oceania, Americas). */
   expansions: string[];
   goalBoard: GoalBoard;
-  playMode: PlayMode;
 }
 
 export interface GamePlayer {
@@ -40,7 +37,6 @@ export interface Game {
   coreSets: CoreSet[];
   expansions: string[];
   goalBoard: GoalBoard;
-  playMode: PlayMode;
   notes: string | null;
   players: GamePlayer[];
   createdAt: number;
@@ -56,7 +52,6 @@ export interface GameSummary {
   coreSets: CoreSet[];
   expansions: string[];
   goalBoard: GoalBoard;
-  playMode: PlayMode;
   scored: boolean;
   players: {
     id: string;

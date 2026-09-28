@@ -33,10 +33,11 @@ CREATE TABLE IF NOT EXISTS games (
   owner_id        TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   played_at       INTEGER NOT NULL,
   status          TEXT NOT NULL DEFAULT 'in_progress',  -- in_progress | completed
+  -- `core_sets` is reserved: only ['wingspan'] is used today, but it lets
+  -- Wingspan Asia be re-added later without a migration.
   core_sets       TEXT NOT NULL DEFAULT '["wingspan"]',  -- JSON array of standalone sets
   expansions      TEXT NOT NULL DEFAULT '[]',            -- JSON array of expansion ids
   goal_board      TEXT NOT NULL DEFAULT 'green',          -- green | blue
-  play_mode       TEXT NOT NULL DEFAULT 'standard',       -- standard | duet | flock
   notes           TEXT,
   created_at      INTEGER NOT NULL,
   updated_at      INTEGER NOT NULL

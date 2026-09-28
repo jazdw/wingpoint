@@ -15,7 +15,14 @@
  * stored totals always agree.
  */
 
-import type { CoreSet, GameConfig, GoalBoard, PlayMode, ScoreMap } from './types';
+import type { CoreSet, GameConfig, GoalBoard, ScoreMap } from './types';
+
+/**
+ * Optional Wingspan Asia play modes. Deliberately not persisted yet: the scoring
+ * engine accepts them so a `play_mode` column can be added back later without
+ * touching the scoring logic.
+ */
+export type ScoringMode = 'duet' | 'flock';
 
 export interface CategoryDef {
   id: string;
@@ -67,12 +74,6 @@ export const EXPANSIONS: SetDef[] = [
 
 /** Expansions the user can tick, in display order. */
 export const SELECTABLE_EXPANSIONS = EXPANSIONS;
-
-export const PLAY_MODES: { id: PlayMode; name: string; short: string }[] = [
-  { id: 'standard', name: 'Standard', short: 'Standard' },
-  { id: 'duet', name: 'Duet (2 players)', short: 'Duet' },
-  { id: 'flock', name: 'Flock (6–7 players)', short: 'Flock' },
-];
 
 /* ------------------------------------------------------------------ */
 /* End-of-round goals                                                  */
@@ -188,22 +189,18 @@ export function normalizeConfig(config: Partial<GameConfig> | null | undefined):
     : [];
   expansions.sort((a, b) => a.localeCompare(b));
 
-  const playMode: PlayMode =
-    config?.playMode === 'duet' || config?.playMode === 'flock' ? config.playMode : 'standard';
-
   return {
     coreSets,
     expansions,
     goalBoard: config?.goalBoard === 'blue' ? 'blue' : 'green',
-    playMode,
   };
 }
 
-export function configProfileId(config: GameConfig): string {
-  return [config.goalBoard, config.playMode, ...config.coreSets, ...config.expansions].join('|');
+export function configProfileId(config: GameConfig, modes: ScoringMode[] = []): string {
+  return [config.goalBoard, ...config.coreSets, ...config.expansions, ...modes].join('|');
 }
 
-export function configName(config: GameConfig): string {
+export function configName(config: GameConfig, modes: ScoringMode[] = []): string {
   const core = config.coreSets.map(
     (id) => CORE_SETS.find((set) => set.id === id)?.short ?? id,
   );
@@ -211,13 +208,17 @@ export function configName(config: GameConfig): string {
     (id) => EXPANSIONS.find((set) => set.id === id)?.short ?? id,
   );
   let name = [...core, ...expansions].join(' + ');
-  if (config.playMode === 'duet') name += ' (Duet)';
-  else if (config.playMode === 'flock') name += ' (Flock)';
+  if (modes.includes('duet')) name += ' (Duet)';
+  else if (modes.includes('flock')) name += ' (Flock)';
   name += config.goalBoard === 'blue' ? ' · Blue goals' : ' · Green goals';
   return name;
 }
 
-export function deriveProfile(config: GameConfig): ScoringProfile {
+/**
+ * Build the scoring profile for a game. `modes` is empty for now; pass Asia
+ * Duet/Flock modes here once they are persisted again.
+ */
+export function deriveProfile(config: GameConfig, modes: ScoringMode[] = []): ScoringProfile {
   const hasAsia = config.coreSets.includes('asia');
   const expansions = new Set(config.expansions);
   const categories: CategoryDef[] = [
@@ -230,15 +231,15 @@ export function deriveProfile(config: GameConfig): ScoringProfile {
   ];
 
   if (expansions.has('oceania')) categories.push(NECTAR_CATEGORY);
-  if (hasAsia && config.playMode === 'duet') categories.push(DUET_CATEGORY);
+  if (hasAsia && modes.includes('duet')) categories.push(DUET_CATEGORY);
   if (expansions.has('americas')) categories.push(HUMMINGBIRD_CATEGORY);
 
-  const nectarTies = hasAsia && config.playMode === 'flock' ? 'friendly' : 'split';
+  const nectarTies = hasAsia && modes.includes('flock') ? 'friendly' : 'split';
 
   return {
-    id: configProfileId(config),
-    name: configName(config),
-    description: 'Derived from the selected sets, goal board and play mode.',
+    id: configProfileId(config, modes),
+    name: configName(config, modes),
+    description: 'Derived from the selected sets, goal board and play modes.',
     expansions: [...config.coreSets, ...config.expansions],
     categories,
     goalBoard: config.goalBoard,
@@ -257,18 +258,22 @@ export interface ConfigValidation {
   error?: string;
 }
 
-export function validateConfig(config: GameConfig, playerCount: number): ConfigValidation {
+export function validateConfig(
+  config: GameConfig,
+  playerCount: number,
+  modes: ScoringMode[] = [],
+): ConfigValidation {
   const hasAsia = config.coreSets.includes('asia');
   if (config.coreSets.length === 0) {
     return { valid: false, error: 'Choose at least one standalone set.' };
   }
-  if (config.playMode === 'duet') {
+  if (modes.includes('duet')) {
     if (!hasAsia) return { valid: false, error: 'Duet mode requires Wingspan Asia.' };
     if (playerCount !== 2) {
       return { valid: false, error: 'Asia Duet mode is played with exactly 2 players.' };
     }
   }
-  if (config.playMode === 'flock') {
+  if (modes.includes('flock')) {
     if (!hasAsia) return { valid: false, error: 'Flock mode requires Wingspan Asia.' };
     if (playerCount < 6 || playerCount > 7) {
       return { valid: false, error: 'Asia Flock mode needs 6 or 7 players.' };

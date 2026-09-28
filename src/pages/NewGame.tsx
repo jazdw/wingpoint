@@ -4,13 +4,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import {
-  CORE_SETS,
   deriveProfile,
   normalizeConfig,
   SELECTABLE_EXPANSIONS,
   validateConfig,
 } from '../../shared/scoring';
-import type { CoreSet, Game, GoalBoard, PublicUser } from '../../shared/types';
+import type { Game, GoalBoard, PublicUser } from '../../shared/types';
 import { fromDateInput, toDateInput } from '../lib/format';
 
 interface DraftPlayer {
@@ -30,7 +29,6 @@ export function NewGame() {
   });
 
   const [playedAt, setPlayedAt] = useState(() => Date.now());
-  const [coreSets, setCoreSets] = useState<CoreSet[]>(['wingspan']);
   const [expansions, setExpansions] = useState<string[]>([]);
   const [goalBoard, setGoalBoard] = useState<GoalBoard>('green');
   const [players, setPlayers] = useState<DraftPlayer[]>([
@@ -38,7 +36,7 @@ export function NewGame() {
   ]);
   const [error, setError] = useState<string | null>(null);
 
-  const config = normalizeConfig({ coreSets, expansions, goalBoard });
+  const config = normalizeConfig({ expansions, goalBoard });
   const profile = deriveProfile(config);
   const validation = validateConfig(config, players.length);
   const selectedUserIds = new Set(players.map((player) => player.userId).filter(Boolean) as string[]);
@@ -54,12 +52,6 @@ export function NewGame() {
     },
     onError: (mutationError: Error) => setError(mutationError.message),
   });
-
-  function toggleCoreSet(setId: CoreSet) {
-    setCoreSets((prev) =>
-      prev.includes(setId) ? prev.filter((value) => value !== setId) : [...prev, setId],
-    );
-  }
 
   function toggleExpansion(expansionId: string) {
     setExpansions((prev) =>
@@ -107,7 +99,6 @@ export function NewGame() {
       coreSets: config.coreSets,
       expansions: config.expansions,
       goalBoard: config.goalBoard,
-      playMode: config.playMode,
       players: cleanPlayers,
     });
   }
@@ -135,22 +126,6 @@ export function NewGame() {
             onChange={(event) => setPlayedAt(fromDateInput(event.target.value))}
           />
         </label>
-
-        <div className="setup-row">
-          <span className="setup-label">Standalone sets</span>
-          <div className="chip-list">
-            {CORE_SETS.map((set) => (
-              <button
-                key={set.id}
-                type="button"
-                className={`chip${config.coreSets.includes(set.id as CoreSet) ? ' chip-on' : ''}`}
-                onClick={() => toggleCoreSet(set.id as CoreSet)}
-              >
-                {set.short}
-              </button>
-            ))}
-          </div>
-        </div>
 
         <div className="setup-row">
           <span className="setup-label">Expansions</span>

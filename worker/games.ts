@@ -18,7 +18,6 @@ import type {
   GameStatus,
   GameSummary,
   GoalBoard,
-  PlayMode,
   PlayerStatus,
   ScoreMap,
 } from '../shared/types';
@@ -37,7 +36,6 @@ export interface GameRow {
   core_sets: string;
   expansions: string;
   goal_board: string;
-  play_mode: string;
   notes: string | null;
   created_at: number;
   updated_at: number;
@@ -65,14 +63,12 @@ function parseJson<T>(value: string | null | undefined, fallback: T): T {
 }
 
 export function configForGame(
-  row: Pick<GameRow, 'core_sets' | 'expansions' | 'goal_board' | 'play_mode'>,
+  row: Pick<GameRow, 'core_sets' | 'expansions' | 'goal_board'>,
 ): GameConfig {
   return normalizeConfig({
     coreSets: parseJson<CoreSet[]>(row.core_sets, ['wingspan']),
     expansions: parseJson<string[]>(row.expansions, []),
     goalBoard: row.goal_board === 'blue' ? 'blue' : 'green',
-    playMode:
-      row.play_mode === 'duet' || row.play_mode === 'flock' ? row.play_mode : 'standard',
   });
 }
 
@@ -101,7 +97,6 @@ function serializeGame(row: GameRow, players: PlayerRow[]): Game {
     coreSets: config.coreSets,
     expansions: config.expansions,
     goalBoard: config.goalBoard,
-    playMode: config.playMode,
     notes: row.notes,
     players: players.map(serializePlayer),
     createdAt: row.created_at,
@@ -126,7 +121,6 @@ export function serializeSummary(row: GameRow, players: PlayerRow[]): GameSummar
     coreSets: config.coreSets,
     expansions: config.expansions,
     goalBoard: config.goalBoard,
-    playMode: config.playMode,
     scored: computed.totals.some((total) => total > 0),
     players: ordered.map((player, index) => ({
       id: player.id,
@@ -347,7 +341,6 @@ function configFromBody(body: Record<string, unknown>): GameConfig {
     coreSets: Array.isArray(body.coreSets) ? (body.coreSets as CoreSet[]) : undefined,
     expansions: Array.isArray(body.expansions) ? (body.expansions as string[]) : undefined,
     goalBoard: (body.goalBoard as GoalBoard) ?? 'green',
-    playMode: (body.playMode as PlayMode) ?? 'standard',
   });
 }
 
@@ -417,8 +410,8 @@ gameRoutes.post('/', async (c) => {
 
   await c.env.DB.prepare(
     `INSERT INTO games
-       (id, owner_id, played_at, status, core_sets, expansions, goal_board, play_mode, notes, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, owner_id, played_at, status, core_sets, expansions, goal_board, notes, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       id,
@@ -428,7 +421,6 @@ gameRoutes.post('/', async (c) => {
       JSON.stringify(config.coreSets),
       JSON.stringify(config.expansions),
       config.goalBoard,
-      config.playMode,
       typeof body.notes === 'string' ? body.notes.slice(0, 2000) : null,
       now,
       now,
@@ -464,8 +456,7 @@ gameRoutes.patch('/:id', async (c) => {
   const config =
     body.coreSets !== undefined ||
     body.expansions !== undefined ||
-    body.goalBoard !== undefined ||
-    body.playMode !== undefined
+    body.goalBoard !== undefined
       ? configFromBody(body)
       : configForGame(existing);
   const profile = deriveProfile(config);
@@ -511,7 +502,7 @@ gameRoutes.patch('/:id', async (c) => {
   await c.env.DB.prepare(
     `UPDATE games
         SET played_at = ?, status = ?, core_sets = ?, expansions = ?, goal_board = ?,
-            play_mode = ?, notes = ?, updated_at = ?
+            notes = ?, updated_at = ?
       WHERE id = ?`,
   )
     .bind(
@@ -520,7 +511,6 @@ gameRoutes.patch('/:id', async (c) => {
       JSON.stringify(config.coreSets),
       JSON.stringify(config.expansions),
       config.goalBoard,
-      config.playMode,
       notes,
       now,
       id,

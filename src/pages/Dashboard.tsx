@@ -20,7 +20,6 @@ function GameCard({
       coreSets: game.coreSets,
       expansions: game.expansions,
       goalBoard: game.goalBoard,
-      playMode: game.playMode,
     }),
   ).name;
   const isInvited = currentUserId

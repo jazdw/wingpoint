@@ -5,7 +5,6 @@ import { api } from '../api';
 import { useAuth, useOnline } from '../auth';
 import { ScoreSheet, type EditablePlayer } from '../components/ScoreSheet';
 import {
-  CORE_SETS,
   deriveProfile,
   emptyScores,
   fieldKeys,
@@ -15,7 +14,6 @@ import {
   validateConfig,
 } from '../../shared/scoring';
 import type {
-  CoreSet,
   Game,
   GameConfig,
   GameStatus,
@@ -32,7 +30,6 @@ function gameConfig(game: Game): GameConfig {
     coreSets: game.coreSets,
     expansions: game.expansions,
     goalBoard: game.goalBoard,
-    playMode: game.playMode,
   });
 }
 
@@ -43,7 +40,6 @@ function toPayload(game: Game) {
     coreSets: game.coreSets,
     expansions: game.expansions,
     goalBoard: game.goalBoard,
-    playMode: game.playMode,
     notes: game.notes,
     players: game.players.map((player) => ({
       id: player.id,
@@ -209,7 +205,6 @@ export function GameDetail() {
         coreSets: patch.coreSets ?? prev.coreSets,
         expansions: patch.expansions ?? prev.expansions,
         goalBoard: patch.goalBoard ?? prev.goalBoard,
-        playMode: patch.playMode ?? prev.playMode,
       });
       const nextProfile = deriveProfile(nextConfig);
       const keys = fieldKeys(nextProfile);
@@ -233,17 +228,9 @@ export function GameDetail() {
         coreSets: nextConfig.coreSets,
         expansions: nextConfig.expansions,
         goalBoard: nextConfig.goalBoard,
-        playMode: nextConfig.playMode,
         players,
       };
     });
-  }
-
-  function toggleCoreSet(setId: CoreSet) {
-    const next = config.coreSets.includes(setId)
-      ? config.coreSets.filter((value) => value !== setId)
-      : [...config.coreSets, setId];
-    changeConfig({ coreSets: next });
   }
 
   function toggleExpansion(expansionId: string) {
@@ -377,23 +364,6 @@ export function GameDetail() {
 
       <div className="card stack-sm">
         <h2>Game setup</h2>
-        <div className="setup-row">
-          <span className="setup-label">Standalone sets</span>
-          <div className="chip-list">
-            {CORE_SETS.map((set) => (
-              <button
-                key={set.id}
-                type="button"
-                className={`chip${config.coreSets.includes(set.id as CoreSet) ? ' chip-on' : ''}`}
-                disabled={readOnly}
-                onClick={() => toggleCoreSet(set.id as CoreSet)}
-              >
-                {set.short}
-              </button>
-            ))}
-          </div>
-        </div>
-
         <div className="setup-row">
           <span className="setup-label">Expansions</span>
           <div className="chip-list">
