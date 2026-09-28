@@ -17,7 +17,7 @@ front end, Google sign-in (allow-list only) and offline support.
   offline, edits are kept in `localStorage` and synced when you reconnect.
 - **Complete or cancel** — mark a game **completed** to count it in stats, or
   **cancel** it to abandon it without deleting. Cancelled games stay in your list
-  (marked Cancelled), are excluded from stats, and free up your in-progress slot.
+  (marked Cancelled), and are excluded from stats.
 - **Live viewing** — linked players watch a game update live from their own
   login; only the score master (the game owner) can edit.
 - **Stats across games** — wins, averages, category breakdowns, results by
@@ -123,8 +123,9 @@ npx wrangler d1 execute wingpoint --remote \
 - **Invitations**: linking another account to a game sends them an invitation;
   the game shows as *Invitation* on their dashboard until they accept or decline.
   Guests never need to accept.
-- **One in-progress game per user**: you can’t start or accept a game while you
-  already have one in progress. Finish or delete it first.
+- **Multiple games in progress**: you can have several games going at once (for
+  example at different houses). In-progress games always appear first on the
+  dashboard; complete or cancel each one when you’re done.
 - **Live viewing**: while a game is in progress, non-owners poll every 5 seconds
   and the score sheet is read-only for them.
 

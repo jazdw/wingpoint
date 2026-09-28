@@ -611,6 +611,11 @@ select {
   background: var(--warn-bg);
   color: var(--warn-text);
 }
+.badge-live {
+  background: color-mix(in srgb, var(--accent) 22%, transparent);
+  color: var(--accent);
+  animation: pulse 1.8s ease-in-out infinite;
+}
 
 /* ============================================================
    Stat cards
@@ -665,6 +670,19 @@ select {
 .game-card:hover {
   border-color: var(--primary);
   transform: translateY(-2px);
+}
+
+.game-card-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 28%, transparent), var(--shadow);
+  overflow: hidden;
+}
+.game-card-active::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 5px;
+  background: var(--accent);
 }
 
 .game-card-head {

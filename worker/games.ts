@@ -175,41 +175,6 @@ export async function canViewGame(env: Env, game: GameRow, userId: string): Prom
   return Boolean(player);
 }
 
-/**
- * True when any of the users already has an in-progress game (as owner or an
- * accepted player), excluding `excludeGameId`.
- */
-export async function hasInProgressConflict(
-  env: Env,
-  userIds: (string | null | undefined)[],
-  excludeGameId?: string,
-): Promise<boolean> {
-  const ids = [...new Set(userIds.filter((id): id is string => Boolean(id)))];
-  if (ids.length === 0) return false;
-  const placeholders = ids.map(() => '?').join(', ');
-
-  const owner = await env.DB.prepare(
-    `SELECT id FROM games
-      WHERE status = 'in_progress' AND owner_id IN (${placeholders})
-      ${excludeGameId ? 'AND id != ?' : ''}
-      LIMIT 1`,
-  )
-    .bind(...ids, ...(excludeGameId ? [excludeGameId] : []))
-    .first();
-  if (owner) return true;
-
-  const player = await env.DB.prepare(
-    `SELECT gp.game_id FROM game_players gp
-       JOIN games g ON g.id = gp.game_id
-      WHERE g.status = 'in_progress' AND gp.status = 'accepted' AND gp.user_id IN (${placeholders})
-      ${excludeGameId ? 'AND g.id != ?' : ''}
-      LIMIT 1`,
-  )
-    .bind(...ids, ...(excludeGameId ? [excludeGameId] : []))
-    .first();
-  return Boolean(player);
-}
-
 /* ------------------------------------------------------------------ */
 /* Validation & writes                                                 */
 /* ------------------------------------------------------------------ */
@@ -390,15 +355,6 @@ gameRoutes.post('/', async (c) => {
   const status = STATUSES.includes(body.status as GameStatus)
     ? (body.status as GameStatus)
     : 'in_progress';
-  if (status === 'in_progress') {
-    const conflict = await hasInProgressConflict(c.env, [user.id, ...players.map((p) => p.userId)]);
-    if (conflict) {
-      return c.json(
-        { error: 'One of the players already has an in-progress game. Finish it first.' },
-        409,
-      );
-    }
-  }
 
   const playedAt =
     typeof body.playedAt === 'number' && Number.isFinite(body.playedAt)
@@ -488,16 +444,6 @@ gameRoutes.patch('/:id', async (c) => {
   const validation = validateConfig(config, playerCount);
   if (!validation.valid) return c.json({ error: validation.error }, 400);
 
-  if (status === 'in_progress') {
-    const ids = inputs ? [user.id, ...inputs.map((player) => player.userId)] : [user.id];
-    if (await hasInProgressConflict(c.env, ids, id)) {
-      return c.json(
-        { error: 'One of the players already has an in-progress game. Finish it first.' },
-        409,
-      );
-    }
-  }
-
   const now = Date.now();
   await c.env.DB.prepare(
     `UPDATE games
@@ -554,13 +500,6 @@ gameRoutes.post('/:id/accept', async (c) => {
     .first<PlayerRow>();
   if (!player) return c.json({ error: 'You are not invited to this game.' }, 400);
   if (player.status === 'accepted') return c.json({ game: await loadGame(c.env, id) });
-
-  if (row.status === 'in_progress' && (await hasInProgressConflict(c.env, [user.id], id))) {
-    return c.json(
-      { error: 'You already have an in-progress game. Finish it before joining another.' },
-      409,
-    );
-  }
 
   await c.env.DB.prepare('UPDATE game_players SET status = ?, updated_at = ? WHERE id = ?')
     .bind('accepted', Date.now(), player.id)
