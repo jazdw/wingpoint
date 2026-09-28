@@ -1,0 +1,17 @@
+# Local development secrets for Wrangler.
+# Copy this file to `.dev.vars` and fill in real values. Never commit `.dev.vars`.
+#
+#   cp .dev.vars.example .dev.vars
+#
+# For deployed environments set these with `wrangler secret put <NAME>`.
+
+# Google OAuth 2.0 credentials.
+# Create them at https://console.cloud.google.com/apis/credentials
+# Authorised redirect URIs (add both):
+#   http://localhost:5173/api/auth/google/callback
+#   https://<your-worker-domain>/api/auth/google/callback
+GOOGLE_CLIENT_ID=""
+GOOGLE_CLIENT_SECRET=""
+
+# Comma separated allow-list of Google account emails.
+ALLOWED_EMAILS="you@example.com"

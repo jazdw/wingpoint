@@ -1,0 +1,39 @@
+{
+  "name": "wingpoint",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "npm run build && vite preview",
+    "deploy": "npm run build && wrangler deploy",
+    "lint": "oxlint",
+    "typecheck": "tsc -b",
+    "test:scoring": "node --experimental-strip-types scripts/scoring-selftest.ts",
+    "cf-typegen": "wrangler types",
+    "db:migrate": "wrangler d1 migrations apply wingpoint --local",
+    "db:migrate:remote": "wrangler d1 migrations apply wingpoint --remote",
+    "db:create": "wrangler d1 create wingpoint",
+    "icons": "node scripts/generate-icons.mjs"
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.90.2",
+    "hono": "^4.10.2",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^7.13.0"
+  },
+  "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.61.0",
+    "@cloudflare/workers-types": "^5.20260926.1",
+    "@types/node": "^24.19.0",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "oxlint": "^1.81.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0",
+    "wrangler": "^4.143.0"
+  }
+}

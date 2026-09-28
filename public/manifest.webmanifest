@@ -1,0 +1,22 @@
+{
+  "name": "WingPoint — Wingspan scorekeeper",
+  "short_name": "WingPoint",
+  "description": "Keep score and track stats for Wingspan and its expansions.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b1513",
+  "theme_color": "#0d9488",
+  "categories": ["games", "utilities"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    { "name": "New game", "short_name": "New", "url": "/games/new" },
+    { "name": "Statistics", "short_name": "Stats", "url": "/stats" }
+  ]
+}

@@ -1,0 +1,38 @@
+/**
+ * Cloudflare Worker configuration for WingPoint.
+ *
+ * After creating your D1 database with `npm run db:create`, replace the
+ * `database_id` below with the id printed by Wrangler.
+ *
+ * Secrets are NOT stored here. Set them with:
+ *   npx wrangler secret put GOOGLE_CLIENT_ID
+ *   npx wrangler secret put GOOGLE_CLIENT_SECRET
+ *
+ * `ALLOWED_EMAILS` can be a plain var (comma separated). For local dev put
+ * values in `.dev.vars` (see `.dev.vars.example`).
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "wingpoint",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-09-26",
+  "assets": {
+    "not_found_handling": "single-page-application",
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "wingpoint",
+      "database_id": "00000000-0000-0000-0000-000000000000",
+      "migrations_dir": "migrations"
+    }
+  ],
+  "vars": {
+    "ALLOWED_EMAILS": ""
+  },
+  "observability": {
+    "enabled": true
+  },
+  "upload_source_maps": true
+}
