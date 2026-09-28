@@ -1,8 +1,9 @@
-import { NavLink, Outlet } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth';
 
 export function Layout() {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
 
   return (
     <div className="app-shell">
@@ -28,7 +29,13 @@ export function Layout() {
               ) : (
                 <span className="avatar avatar-fallback">{user.name?.[0]?.toUpperCase() ?? '?'}</span>
               )}
-              <button type="button" className="btn btn-ghost btn-sm" onClick={() => void logout()}>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  void logout().then(() => navigate('/'));
+                }}
+              >
                 Sign out
               </button>
             </>

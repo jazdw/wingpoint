@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from './api';
 import type { AuthUser } from '../shared/types';
 
@@ -27,6 +28,7 @@ const AuthContext = createContext<AuthState>({
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   // Start from the cached user so an offline reload stays signed in.
   const [user, setUser] = useState<AuthUser | null>(() => readCachedUser());
   const [loading, setLoading] = useState(true);
@@ -71,15 +73,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(null);
       try {
         localStorage.removeItem(USER_KEY);
+        // Remove offline drafts so the previous user's game isn't left behind.
+        for (const key of Object.keys(localStorage)) {
+          if (key.startsWith('wp-draft-')) localStorage.removeItem(key);
+        }
       } catch {
         // ignore
       }
       // Drop cached API data so it isn't visible to the next user.
+      queryClient.clear();
       if ('caches' in window) {
         caches.keys().then((keys) => keys.forEach((key) => void caches.delete(key)));
       }
     }
-  }, []);
+  }, [queryClient]);
 
   const value = useMemo(() => ({ user, loading, logout }), [user, loading, logout]);
 
