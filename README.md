@@ -63,6 +63,20 @@ same origin under `/api/*`.
 > **Note:** Google OAuth requires an `http://localhost:5173/api/auth/google/callback`
 > redirect URI to be registered for your OAuth client (see below).
 
+#### Testing on your phone
+
+By default the dev server binds to **localhost only**. To reach it from a phone
+on the same Wi‑Fi, set `DEV_HOST` to your machine's LAN IP (copy `.env.example`
+to `.env.local`, or pass it inline):
+
+```bash
+DEV_HOST=192.168.1.182 npm run dev
+```
+
+Vite then prints a `Network:` URL — open that on your phone and tap **Dev sign in**.
+The dev sign-in works from private network addresses (`192.168.*`, `10.*`,
+`172.16–31.*`, `*.local`) but is still blocked on public hostnames.
+
 ### Useful scripts
 
 | Script                   | Description                              |
