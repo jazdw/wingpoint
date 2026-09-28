@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
+import { api } from '../api';
 import { useAuth } from '../auth';
 
 const MESSAGES: Record<string, string> = {
@@ -17,19 +19,28 @@ export function Login() {
   const [params] = useSearchParams();
   const location = useLocation();
   const error = params.get('auth');
-  const [devBusy, setDevBusy] = useState(false);
+  const [devBusy, setDevBusy] = useState<string | null>(null);
   const [devError, setDevError] = useState<string | null>(null);
+
+  const devUsersQuery = useQuery({
+    queryKey: ['dev-users'],
+    queryFn: () => api<{ users: { email: string; name: string }[] }>('/api/auth/dev-users'),
+    enabled: import.meta.env.DEV,
+    retry: false,
+  });
 
   // The login page itself is never a "return" destination.
   useEffect(() => {
     sessionStorage.removeItem('wp-return-path');
   }, [location.pathname]);
 
-  async function signInDev() {
-    setDevBusy(true);
+  async function signInDev(email: string) {
+    setDevBusy(email);
     setDevError(null);
     try {
-      const response = await fetch('/api/auth/dev', { credentials: 'same-origin' });
+      const response = await fetch(`/api/auth/dev?email=${encodeURIComponent(email)}`, {
+        credentials: 'same-origin',
+      });
       if (!response.ok) {
         const body = (await response.json().catch(() => ({}))) as { error?: string };
         throw new Error(body.error ?? `Dev sign-in failed (${response.status})`);
@@ -37,7 +48,7 @@ export function Login() {
       window.location.href = '/';
     } catch (caught) {
       setDevError(caught instanceof Error ? caught.message : 'Dev sign-in failed');
-      setDevBusy(false);
+      setDevBusy(null);
     }
   }
 
@@ -56,13 +67,23 @@ export function Login() {
         <a className="btn btn-primary btn-block" href="/api/auth/google">
           Sign in with Google
         </a>
-        {import.meta.env.DEV && (
-          <>
-            <button type="button" className="link" onClick={() => void signInDev()} disabled={devBusy}>
-              {devBusy ? 'Signing in…' : 'Dev sign in (localhost only)'}
-            </button>
-            <p className="fine-print">Requires DEV_LOGIN_EMAIL in .dev.vars.</p>
-          </>
+        {import.meta.env.DEV && (devUsersQuery.data?.users.length ?? 0) > 0 && (
+          <div className="dev-logins">
+            <p className="fine-print">Dev sign in (local network only)</p>
+            {(devUsersQuery.data?.users ?? []).map((account) => (
+              <button
+                key={account.email}
+                type="button"
+                className="link"
+                onClick={() => void signInDev(account.email)}
+                disabled={devBusy !== null}
+              >
+                {devBusy === account.email
+                  ? 'Signing in…'
+                  : `${account.name} · ${account.email}`}
+              </button>
+            ))}
+          </div>
         )}
         {devError && <p className="alert alert-error">{devError}</p>}
         <p className="fine-print">Only allow-listed Google accounts can sign in.</p>

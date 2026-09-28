@@ -16,7 +16,8 @@ GOOGLE_CLIENT_SECRET=""
 # Comma separated allow-list of Google account emails.
 ALLOWED_EMAILS="you@example.com"
 
-# LOCAL DEVELOPMENT ONLY. Set this to sign in without Google at
-# http://localhost:5173/api/auth/dev (also linked on the login screen while
-# running `npm run dev`). Never set this in production.
-DEV_LOGIN_EMAIL="you@example.com"
+# LOCAL DEVELOPMENT ONLY. Comma-separated emails you can sign in as without
+# Google. Each one appears as a button on the login screen while running
+# `npm run dev` — handy for testing invitations between two accounts.
+# Never set these in production.
+DEV_LOGIN_EMAILS="alice@example.com,bob@example.com"

@@ -1204,6 +1204,14 @@ select {
   margin-top: 0.5rem;
 }
 
+.dev-logins {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  align-items: center;
+  width: 100%;
+}
+
 .page-loading {
   padding: 3rem 0;
   text-align: center;

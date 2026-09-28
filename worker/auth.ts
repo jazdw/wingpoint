@@ -281,21 +281,46 @@ authRoutes.post('/logout', async (c) => {
   return c.json({ ok: true });
 });
 
+function devEmails(env: Env): string[] {
+  const raw = env.DEV_LOGIN_EMAILS ?? env.DEV_LOGIN_EMAIL ?? '';
+  return raw
+    .split(',')
+    .map((value) => value.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function devDisplayName(email: string): string {
+  const local = email.split('@')[0] ?? email;
+  return local.charAt(0).toUpperCase() + local.slice(1);
+}
+
+/** The dev accounts available to sign in as (only on a local/private host). */
+authRoutes.get('/dev-users', (c) => {
+  const host = new URL(c.req.url).hostname;
+  if (!isPrivateHost(host)) return c.json({ users: [] });
+  return c.json({
+    users: devEmails(c.env).map((email) => ({ email, name: devDisplayName(email) })),
+  });
+});
+
 /**
- * Local-development sign-in. Only works when DEV_LOGIN_EMAIL is set and the
- * request is made to localhost, so it can never be used in production.
+ * Local-development sign-in. Only works for an allow-listed dev email and when
+ * the request is made to a local/private host, so it can never be used in
+ * production.
  */
 authRoutes.get('/dev', async (c) => {
-  const email = c.env.DEV_LOGIN_EMAIL?.trim().toLowerCase();
   const host = new URL(c.req.url).hostname;
-  if (!email || !isPrivateHost(host)) {
+  const allowed = devEmails(c.env);
+  const requested = c.req.query('email')?.trim().toLowerCase();
+  const email = requested ?? allowed[0];
+  if (!email || !isPrivateHost(host) || !allowed.includes(email)) {
     return c.json({ error: 'Dev sign-in is disabled.' }, 403);
   }
 
   const userId = await upsertUser(c.env, {
     sub: `dev:${email}`,
     email,
-    name: email.split('@')[0],
+    name: devDisplayName(email),
   });
   const token = await createSession(c.env, userId);
   setSessionCookie(c, token);

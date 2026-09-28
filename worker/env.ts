@@ -8,9 +8,11 @@ export interface Env {
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
   /**
-   * LOCAL DEVELOPMENT ONLY. When set, `GET /api/auth/dev` signs in as this
-   * email without Google. Ignored on any non-localhost host.
+   * LOCAL DEVELOPMENT ONLY. Comma-separated emails that `GET /api/auth/dev`
+   * can sign in as without Google. Ignored on any non-local host.
    */
+  DEV_LOGIN_EMAILS?: string;
+  /** Single-email fallback for DEV_LOGIN_EMAILS. */
   DEV_LOGIN_EMAIL?: string;
 }
 
