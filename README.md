@@ -155,7 +155,8 @@ npx wrangler d1 execute wingpoint --remote \
   it. There is no global/group browsing.
 - **Invitations**: linking another account to a game sends them an invitation;
   the game shows as *Invitation* on their dashboard until they accept or decline.
-  Guests never need to accept.
+  Guests never need to accept. **Declining turns the invitee into a guest** (the
+  roster and setup stay fixed) — the game keeps the same number of players.
 - **Multiple games in progress**: you can have several games going at once (for
   example at different houses). In-progress games always appear first on the
   dashboard; complete or cancel each one when you’re done.

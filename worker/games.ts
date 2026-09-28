@@ -593,7 +593,16 @@ gameRoutes.post('/:id/decline', async (c) => {
   if (player.status === 'accepted') {
     return c.json({ error: 'You have already joined this game.' }, 400);
   }
-  await c.env.DB.prepare('DELETE FROM game_players WHERE id = ?').bind(player.id).run();
+  // Declining turns the invitee into a guest instead of removing the row, so
+  // the roster and setup stay fixed. Their real name stays hidden — the email
+  // is used as the guest label.
+  await c.env.DB.prepare(
+    `UPDATE game_players
+        SET user_id = NULL, status = 'accepted', name = ?, updated_at = ?
+      WHERE id = ?`,
+  )
+    .bind(user.email, Date.now(), player.id)
+    .run();
   return c.json({ ok: true });
 });
 
