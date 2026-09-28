@@ -146,7 +146,9 @@ npx wrangler d1 execute wingpoint --remote \
   record; tapping a friend opens their stats. Guests are tracked by name and are
   never friends.
 - **Pending invites** show as the invitee's **email** (their name stays hidden
-  until they accept) and do **not** appear as a friend until then.
+  until they accept) — unless they are **already a friend**, in which case their
+  name is shown. A pending invitee does **not** appear as a friend until they
+  accept.
 - **Invite by email**: to add someone new, enter their email address in New Game.
   Only allow-listed accounts can be found — the full user list is never exposed.
 - **Personal stats** are attributed to an account when a player row is linked to

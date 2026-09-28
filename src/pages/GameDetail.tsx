@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { api } from '../api';
+import { api, ApiError } from '../api';
 import { useAuth, useOnline } from '../auth';
 import { ScoreSheet, type EditablePlayer } from '../components/ScoreSheet';
 import { deleteGame, gamePayload as toPayload, getGame, persistGame } from '../lib/gameService';
@@ -83,6 +83,7 @@ export function GameDetail() {
     queryFn: () => getGame(user, id),
     enabled: Boolean(id),
     refetchInterval: (query) => {
+      if (query.state.status === 'error') return false;
       const game = query.state.data;
       // Poll while in progress so invite acceptances and live score changes
       // reach everyone, including the score master.
@@ -90,6 +91,10 @@ export function GameDetail() {
       return false;
     },
   });
+
+  // The game was deleted (or access was revoked) while we were viewing it.
+  const gameGone =
+    gameQuery.isError && gameQuery.error instanceof ApiError && gameQuery.error.status === 404;
 
   const [draft, setDraft] = useState<Game | null>(null);
   const [saveState, setSaveState] = useState<SaveState>('saved');
@@ -183,7 +188,7 @@ export function GameDetail() {
   });
 
   useEffect(() => {
-    if (!draft || readOnly) return;
+    if (!draft || readOnly || gameGone) return;
     // A server game can't be saved until the session is known.
     if (!isLocal && !user) return;
     const payload = JSON.stringify(toPayload(draft));
@@ -197,7 +202,7 @@ export function GameDetail() {
     setSaveState('saving');
     const timer = window.setTimeout(() => saveGame(draft), 900);
     return () => window.clearTimeout(timer);
-  }, [draft, online, draftKey, readOnly, user, isLocal, saveGame]);
+  }, [draft, online, draftKey, readOnly, user, isLocal, gameGone, saveGame]);
 
   // Automatically retry a failed save while we're online.
   useEffect(() => {
@@ -231,6 +236,18 @@ export function GameDetail() {
       navigate('/');
     },
   });
+
+  if (gameGone) {
+    return (
+      <div className="card empty-state">
+        <h2>Game no longer available</h2>
+        <p className="muted">This game was deleted by the score master.</p>
+        <Link to="/" className="btn">
+          Back to games
+        </Link>
+      </div>
+    );
+  }
 
   if (gameQuery.isLoading && !draft) {
     return <div className="page-loading">Loading game…</div>;
