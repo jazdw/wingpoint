@@ -27,6 +27,20 @@ function isSecureRequest(url: string): boolean {
   return new URL(url).protocol === 'https:';
 }
 
+/**
+ * Whether a host is local or on a private network. Used only to gate the
+ * development sign-in so it works from a phone on the same LAN but never on a
+ * public hostname.
+ */
+function isPrivateHost(host: string): boolean {
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return true;
+  if (host.endsWith('.local')) return true;
+  if (/^10\./.test(host)) return true;
+  if (/^192\.168\./.test(host)) return true;
+  if (/^172\.(1[6-9]|2[0-9]|3[01])\./.test(host)) return true;
+  return false;
+}
+
 function toAuthUser(row: UserRow): AuthUser {
   return {
     id: row.id,
@@ -274,8 +288,7 @@ authRoutes.post('/logout', async (c) => {
 authRoutes.get('/dev', async (c) => {
   const email = c.env.DEV_LOGIN_EMAIL?.trim().toLowerCase();
   const host = new URL(c.req.url).hostname;
-  const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '::1';
-  if (!email || !isLocal) {
+  if (!email || !isPrivateHost(host)) {
     return c.json({ error: 'Dev sign-in is disabled.' }, 403);
   }
 
