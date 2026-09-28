@@ -8,7 +8,7 @@
  *    localStorage while offline).
  */
 
-const VERSION = 'v1';
+const VERSION = 'v2';
 const SHELL_CACHE = `wp-shell-${VERSION}`;
 const RUNTIME_CACHE = `wp-runtime-${VERSION}`;
 
@@ -19,6 +19,8 @@ const APP_SHELL = [
   '/favicon.svg',
   '/icons/icon-192.png',
   '/icons/icon-512.png',
+  '/patterns/leaves.svg',
+  '/patterns/leaves-dark.svg',
 ];
 
 self.addEventListener('install', (event) => {

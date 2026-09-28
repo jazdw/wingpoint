@@ -65,8 +65,8 @@ function encodePng(width, height, rgba) {
 
 /* ------------------------------------------------------------- drawing --- */
 
-const BG_START = [15, 118, 110];
-const BG_END = [45, 212, 191];
+const BG_START = [47, 107, 69];
+const BG_END = [217, 164, 65];
 const FG = [255, 255, 255];
 
 // Normalised "W" polyline with round caps.
