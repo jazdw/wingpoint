@@ -4,10 +4,12 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api, ApiError } from '../api';
 import { useAuth, useOnline } from '../auth';
 import { ScoreSheet, type EditablePlayer } from '../components/ScoreSheet';
+import { WinnerCelebration } from '../components/WinnerCelebration';
 import { deleteGame, gamePayload as toPayload, getGame, persistGame } from '../lib/gameService';
 import { isLocalGameId } from '../lib/localGames';
 import {
   checkComplete,
+  computeGame,
   deriveProfile,
   normalizeConfig,
   SELECTABLE_EXPANSIONS,
@@ -100,10 +102,13 @@ export function GameDetail() {
   const [saveState, setSaveState] = useState<SaveState>('saved');
   const [saveError, setSaveError] = useState<string | null>(null);
   const [completeError, setCompleteError] = useState<string | null>(null);
+  const [celebrate, setCelebrate] = useState(false);
+  const previousStatus = useRef<Game['status'] | null>(null);
   const lastSaved = useRef('');
   const initialised = useRef(false);
 
   const serverGame = gameQuery.data;
+  const effectiveStatus = draft?.status ?? serverGame?.status;
   const isOwner = isLocal || Boolean(serverGame && user && serverGame.ownerId === user.id);
   const readOnly = Boolean(serverGame) && !isOwner;
   const myPlayer = serverGame?.players.find((player) => player.userId === user?.id);
@@ -211,6 +216,17 @@ export function GameDetail() {
     return () => window.clearTimeout(timer);
   }, [saveState, draft, online, saveGame]);
 
+  // Pop the winner celebration when the game becomes completed — including for
+  // viewers who detect it through polling.
+  useEffect(() => {
+    if (!effectiveStatus) return;
+    const previous = previousStatus.current;
+    previousStatus.current = effectiveStatus;
+    if (effectiveStatus === 'completed' && previous && previous !== 'completed') {
+      setCelebrate(true);
+    }
+  }, [effectiveStatus]);
+
   // If the game was deleted while we were watching, drop it from the cached
   // lists so it doesn't linger on the dashboard.
   useEffect(() => {
@@ -282,6 +298,13 @@ export function GameDetail() {
   const profile = deriveProfile(config);
   const ownerName = game.ownerName;
   const friendIds = new Set((friendsQuery.data?.users ?? []).map((friend) => friend.id));
+  const computed = computeGame(
+    profile,
+    game.players.map((player) => ({ scores: player.scores })),
+  );
+  const winnerNames = computed.winners
+    .map((index) => game.players[index]?.name)
+    .filter((name): name is string => Boolean(name));
 
   function update(partial: Partial<Game>) {
     if (readOnly) return;
@@ -459,6 +482,10 @@ export function GameDetail() {
           onChange={(event) => update({ notes: event.target.value })}
         />
       </label>
+
+      {celebrate && winnerNames.length > 0 && (
+        <WinnerCelebration winners={winnerNames} onClose={() => setCelebrate(false)} />
+      )}
     </div>
   );
 }

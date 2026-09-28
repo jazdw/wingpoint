@@ -881,6 +881,7 @@ select {
   text-align: left;
   font-weight: 650;
   color: var(--text);
+  font-size: 0.85rem;
 }
 .score-table .cat-corner,
 .score-table .cat-label,
@@ -899,6 +900,7 @@ select {
   padding-left: 1.1rem;
   color: var(--muted);
   font-weight: 550;
+  font-size: 0.8rem;
 }
 .score-table .info {
   color: var(--muted);
@@ -1216,6 +1218,65 @@ select {
   padding: 3rem 0;
   text-align: center;
   color: var(--muted);
+}
+
+/* ============================================================
+   Winner celebration
+   ============================================================ */
+
+.celebration {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: grid;
+  place-items: center;
+  padding: 1.5rem;
+  background: rgba(15, 31, 28, 0.45);
+  backdrop-filter: blur(3px);
+}
+.celebration-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+.celebration-card {
+  position: relative;
+  z-index: 1;
+  text-align: center;
+  max-width: 22rem;
+  padding: 2rem 1.5rem;
+  animation: celebration-pop 0.35s ease-out;
+}
+.celebration-card h2 {
+  margin-bottom: 0.25rem;
+}
+.celebration-trophy {
+  font-size: 3.5rem;
+  line-height: 1;
+  animation: celebration-bounce 1.2s ease-in-out infinite;
+}
+
+@keyframes celebration-pop {
+  from {
+    transform: scale(0.8);
+    opacity: 0;
+  }
+  to {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes celebration-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
 }
 
 /* ============================================================
