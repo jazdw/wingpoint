@@ -497,8 +497,18 @@ gameRoutes.patch('/:id', async (c) => {
   if (!body) return c.json({ error: 'Invalid JSON body.' }, 400);
 
   // The setup (sets, expansions, goal board) is fixed when the game is created.
+  // The client sends the unchanged setup on every save, so only reject an
+  // actual change.
   if (body.coreSets !== undefined || body.expansions !== undefined || body.goalBoard !== undefined) {
-    return c.json({ error: 'Game setup cannot be changed after the game is created.' }, 400);
+    const requested = configFromBody(body);
+    const current = configForGame(existing);
+    const unchanged =
+      requested.goalBoard === current.goalBoard &&
+      requested.coreSets.join(',') === current.coreSets.join(',') &&
+      requested.expansions.join(',') === current.expansions.join(',');
+    if (!unchanged) {
+      return c.json({ error: 'Game setup cannot be changed after the game is created.' }, 400);
+    }
   }
   const profile = profileForGame(existing);
 
