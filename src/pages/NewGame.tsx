@@ -4,7 +4,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { DEFAULT_PROFILE_ID, PROFILES } from '../../shared/scoring';
-import type { Game, GameMode, PublicUser } from '../../shared/types';
+import type { Game, GameMode, Group, PublicUser } from '../../shared/types';
 import { fromDateInput, toDateInput } from '../lib/format';
 
 interface DraftPlayer {
@@ -22,7 +22,12 @@ export function NewGame() {
     queryKey: ['users'],
     queryFn: () => api<{ users: PublicUser[] }>('/api/users'),
   });
+  const groupsQuery = useQuery({
+    queryKey: ['groups'],
+    queryFn: () => api<{ groups: Group[] }>('/api/groups'),
+  });
 
+  const [groupId, setGroupId] = useState('');
   const [playedAt, setPlayedAt] = useState(() => Date.now());
   const [mode, setMode] = useState<GameMode>('competitive');
   const [profileId, setProfileId] = useState(DEFAULT_PROFILE_ID);
@@ -41,6 +46,24 @@ export function NewGame() {
     },
     onError: (mutationError: Error) => setError(mutationError.message),
   });
+
+  function chooseGroup(nextGroupId: string) {
+    setGroupId(nextGroupId);
+    const group = (groupsQuery.data?.groups ?? []).find((item) => item.id === nextGroupId);
+    if (group) {
+      setPlayers(
+        group.members.map((member) => ({
+          id: crypto.randomUUID(),
+          name: member.name,
+          userId: member.userId,
+        })),
+      );
+    } else {
+      setPlayers([
+        { id: crypto.randomUUID(), name: user?.name ?? 'Player 1', userId: user?.id ?? null },
+      ]);
+    }
+  }
 
   function updatePlayer(index: number, partial: Partial<DraftPlayer>) {
     setPlayers((prev) => prev.map((player, i) => (i === index ? { ...player, ...partial } : player)));
@@ -70,6 +93,7 @@ export function NewGame() {
       playedAt,
       mode,
       scoringProfile: profileId,
+      groupId: groupId || null,
       players: cleanPlayers,
     });
   }
@@ -121,6 +145,23 @@ export function NewGame() {
             {PROFILES.find((profile) => profile.id === profileId)?.description}
           </small>
         </label>
+
+        {(groupsQuery.data?.groups.length ?? 0) > 0 && (
+          <label className="field">
+            <span>Group (optional)</span>
+            <select value={groupId} onChange={(event) => chooseGroup(event.target.value)}>
+              <option value="">Private — only me</option>
+              {(groupsQuery.data?.groups ?? []).map((group) => (
+                <option key={group.id} value={group.id}>
+                  {group.name}
+                </option>
+              ))}
+            </select>
+            <small className="muted">
+              Group members can watch this game live, but only you can edit it.
+            </small>
+          </label>
+        )}
       </div>
 
       <div className="card stack-sm">

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { authRoutes } from './auth';
 import type { AppEnv } from './env';
 import { gameRoutes } from './games';
+import { groupRoutes } from './groups';
 import { statsRoutes } from './stats';
 import { userRoutes } from './users';
 
@@ -21,6 +22,7 @@ app.get('/api/health', (c) => c.json({ ok: true, name: 'wingpoint' }));
 app.route('/api/auth', authRoutes);
 app.route('/api/users', userRoutes);
 app.route('/api/games', gameRoutes);
+app.route('/api/groups', groupRoutes);
 app.route('/api/stats', statsRoutes);
 
 app.notFound((c) => {

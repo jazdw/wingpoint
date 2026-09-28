@@ -1,6 +1,6 @@
 // Quick self-test for the shared scoring engine. Run with:
 //   node --experimental-strip-types scripts/scoring-selftest.ts
-import { computeGame, PROFILES, TIEBREAK_KEY } from '../shared/scoring.ts';
+import { computeGame, TIEBREAK_KEY } from '../shared/scoring.ts';
 
 let failures = 0;
 

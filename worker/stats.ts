@@ -3,7 +3,7 @@ import { computeGame, getProfile, PROFILES } from '../shared/scoring';
 import type { GameSummary, RivalStat, ScoreMap, Stats } from '../shared/types';
 import { requireAuth } from './auth';
 import type { AppEnv } from './env';
-import { type GameRow, type PlayerRow, serializeSummary } from './games';
+import { type GameRow, type PlayerRow, serializeSummary, VISIBLE_GAMES_SQL } from './games';
 
 interface Entry {
   total: number;
@@ -51,8 +51,10 @@ statsRoutes.get('/', async (c) => {
   const user = c.get('user');
 
   const allGames = await c.env.DB.prepare(
-    'SELECT * FROM games ORDER BY played_at DESC, created_at DESC',
-  ).all<GameRow>();
+    `${VISIBLE_GAMES_SQL} ORDER BY g.played_at DESC, g.created_at DESC`,
+  )
+    .bind(user.id, user.id)
+    .all<GameRow>();
   const allPlayers = await c.env.DB.prepare('SELECT * FROM game_players').all<PlayerRow>();
   const playersByGame = groupPlayers(allPlayers.results);
 

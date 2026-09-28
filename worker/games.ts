@@ -12,6 +12,7 @@ import {
 import type { Game, GameMode, GamePlayer, GameStatus, GameSummary, ScoreMap } from '../shared/types';
 import { requireAuth } from './auth';
 import type { AppEnv, Env } from './env';
+import { isGroupMember } from './groups';
 
 /* ------------------------------------------------------------------ */
 /* Row types & serialization                                           */
@@ -20,6 +21,7 @@ import type { AppEnv, Env } from './env';
 export interface GameRow {
   id: string;
   owner_id: string;
+  group_id: string | null;
   played_at: number;
   mode: GameMode;
   status: GameStatus;
@@ -64,6 +66,7 @@ function serializeGame(row: GameRow, players: PlayerRow[]): Game {
   return {
     id: row.id,
     ownerId: row.owner_id,
+    groupId: row.group_id,
     playedAt: row.played_at,
     mode: row.mode,
     status: row.status,
@@ -88,6 +91,7 @@ export function serializeSummary(row: GameRow, players: PlayerRow[]): GameSummar
   const winners = computed.winners.map((index) => ordered[index]?.id).filter(Boolean) as string[];
   return {
     id: row.id,
+    groupId: row.group_id,
     playedAt: row.played_at,
     mode: row.mode,
     status: row.status,
@@ -128,6 +132,18 @@ export async function loadGame(env: Env, id: string): Promise<Game | null> {
   if (!row) return null;
   const players = await loadPlayerRows(env, id);
   return serializeGame(row, players);
+}
+
+/** SQL selecting games visible to a user (owner or member of the game's group). */
+export const VISIBLE_GAMES_SQL = `SELECT DISTINCT g.*
+   FROM games g
+   LEFT JOIN group_members m ON m.group_id = g.group_id AND m.user_id = ?
+  WHERE g.owner_id = ? OR m.user_id IS NOT NULL`;
+
+export async function canViewGame(env: Env, game: GameRow, userId: string): Promise<boolean> {
+  if (game.owner_id === userId) return true;
+  if (!game.group_id) return false;
+  return isGroupMember(env, game.group_id, userId);
 }
 
 /* ------------------------------------------------------------------ */
@@ -257,9 +273,12 @@ export const gameRoutes = new Hono<AppEnv>();
 gameRoutes.use('*', requireAuth);
 
 gameRoutes.get('/', async (c) => {
+  const user = c.get('user');
   const games = await c.env.DB.prepare(
-    'SELECT * FROM games ORDER BY played_at DESC, created_at DESC LIMIT 200',
-  ).all<GameRow>();
+    `${VISIBLE_GAMES_SQL} ORDER BY g.played_at DESC, g.created_at DESC LIMIT 200`,
+  )
+    .bind(user.id, user.id)
+    .all<GameRow>();
   const players = await c.env.DB.prepare('SELECT * FROM game_players').all<PlayerRow>();
 
   const playersByGame = new Map<string, PlayerRow[]>();
@@ -293,18 +312,25 @@ gameRoutes.post('/', async (c) => {
     ? body.expansions.filter((value): value is string => typeof value === 'string' && KNOWN_EXPANSIONS.has(value))
     : getProfile(profileId).expansions;
 
+  const user = c.get('user');
+  const groupId =
+    typeof body.groupId === 'string' && body.groupId.length > 0 ? body.groupId : null;
+  if (groupId && !(await isGroupMember(c.env, groupId, user.id))) {
+    return c.json({ error: 'You are not a member of that group.' }, 403);
+  }
+
   const id = crypto.randomUUID();
   const now = Date.now();
-  const user = c.get('user');
 
   await c.env.DB.prepare(
     `INSERT INTO games
-       (id, owner_id, played_at, mode, status, scoring_profile, expansions, notes, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, owner_id, group_id, played_at, mode, status, scoring_profile, expansions, notes, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       id,
       user.id,
+      groupId,
       playedAt,
       mode,
       status,
@@ -322,8 +348,11 @@ gameRoutes.post('/', async (c) => {
 });
 
 gameRoutes.get('/:id', async (c) => {
-  const game = await loadGame(c.env, c.req.param('id'));
-  if (!game) return c.json({ error: 'Game not found.' }, 404);
+  const row = await loadGameRow(c.env, c.req.param('id'));
+  if (!row || !(await canViewGame(c.env, row, c.get('user').id))) {
+    return c.json({ error: 'Game not found.' }, 404);
+  }
+  const game = await loadGame(c.env, row.id);
   return c.json({ game });
 });
 
@@ -331,6 +360,9 @@ gameRoutes.patch('/:id', async (c) => {
   const id = c.req.param('id');
   const existing = await loadGameRow(c.env, id);
   if (!existing) return c.json({ error: 'Game not found.' }, 404);
+  if (existing.owner_id !== c.get('user').id) {
+    return c.json({ error: 'Only the score master can edit this game.' }, 403);
+  }
 
   const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body) return c.json({ error: 'Invalid JSON body.' }, 400);
@@ -354,13 +386,27 @@ gameRoutes.patch('/:id', async (c) => {
   const notes =
     typeof body.notes === 'string' ? body.notes.slice(0, 2000) : existing.notes;
 
+  const groupId =
+    typeof body.groupId === 'string' && body.groupId.length > 0
+      ? body.groupId
+      : body.groupId === null
+        ? null
+        : existing.group_id;
+  if (
+    groupId &&
+    groupId !== existing.group_id &&
+    !(await isGroupMember(c.env, groupId, c.get('user').id))
+  ) {
+    return c.json({ error: 'You are not a member of that group.' }, 403);
+  }
+
   const now = Date.now();
   await c.env.DB.prepare(
     `UPDATE games
-        SET played_at = ?, mode = ?, status = ?, scoring_profile = ?, expansions = ?, notes = ?, updated_at = ?
+        SET played_at = ?, mode = ?, status = ?, scoring_profile = ?, expansions = ?, notes = ?, group_id = ?, updated_at = ?
       WHERE id = ?`,
   )
-    .bind(playedAt, mode, status, profileId, JSON.stringify(expansions), notes, now, id)
+    .bind(playedAt, mode, status, profileId, JSON.stringify(expansions), notes, groupId, now, id)
     .run();
 
   if (body.players !== undefined) {
@@ -390,6 +436,9 @@ gameRoutes.delete('/:id', async (c) => {
   const id = c.req.param('id');
   const existing = await loadGameRow(c.env, id);
   if (!existing) return c.json({ error: 'Game not found.' }, 404);
+  if (existing.owner_id !== c.get('user').id) {
+    return c.json({ error: 'Only the score master can delete this game.' }, 403);
+  }
   await c.env.DB.prepare('DELETE FROM games WHERE id = ?').bind(id).run();
   return c.json({ ok: true });
 });

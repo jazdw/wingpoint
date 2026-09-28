@@ -20,6 +20,7 @@ export interface GamePlayer {
 export interface Game {
   id: string;
   ownerId: string;
+  groupId: string | null;
   playedAt: number;
   mode: GameMode;
   status: GameStatus;
@@ -34,6 +35,7 @@ export interface Game {
 /** A lightweight game representation used by list views. */
 export interface GameSummary {
   id: string;
+  groupId: string | null;
   playedAt: number;
   mode: GameMode;
   status: GameStatus;
@@ -56,6 +58,22 @@ export interface PublicUser {
   name: string;
   email: string;
   picture: string | null;
+}
+
+export interface GroupMember {
+  userId: string;
+  name: string;
+  email: string;
+  picture: string | null;
+  role: string;
+}
+
+export interface Group {
+  id: string;
+  name: string;
+  ownerId: string;
+  createdAt: number;
+  members: GroupMember[];
 }
 
 export interface StatsBucket {
