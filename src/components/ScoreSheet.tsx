@@ -28,6 +28,8 @@ interface ScoreSheetProps {
   onChange: (players: EditablePlayer[]) => void;
   /** Friends of the viewer: their names are shown even while pending. */
   knownUserIds?: Set<string>;
+  /** `playerIndex:scoreKey` entries to highlight as invalid. */
+  invalidFields?: Set<string>;
   readOnly?: boolean;
 }
 
@@ -41,16 +43,39 @@ export function ScoreSheet({
   players,
   onChange,
   knownUserIds,
+  invalidFields,
   readOnly = false,
 }: ScoreSheetProps) {
   const computed = computeGame(profile, players);
   const winnerSet = new Set(computed.winners);
+
+  const isInvalid = (playerIndex: number, key: string) =>
+    invalidFields?.has(`${playerIndex}:${key}`) ?? false;
 
   function setScore(playerIndex: number, key: string, value: number | null) {
     onChange(
       players.map((player, index) =>
         index === playerIndex ? { ...player, scores: { ...player.scores, [key]: value } } : player,
       ),
+    );
+  }
+
+  function setGoalPlacement(playerIndex: number, round: number, value: number) {
+    const key = goalRoundKey(round);
+    onChange(
+      players.map((player, index) => {
+        if (index === playerIndex) {
+          return { ...player, scores: { ...player.scores, [key]: value } };
+        }
+        // With exactly two players, picking 1st fills in 2nd for the other.
+        if (players.length === 2 && value === 1) {
+          const other = player.scores[key];
+          if (typeof other !== 'number' || other === 0) {
+            return { ...player, scores: { ...player.scores, [key]: 2 } };
+          }
+        }
+        return player;
+      }),
     );
   }
 
@@ -101,6 +126,7 @@ export function ScoreSheet({
                             value={player.scores[nectarKey(habitat.id)] ?? null}
                             onChange={(value) => setScore(index, nectarKey(habitat.id), value)}
                             disabled={readOnly}
+                            invalid={isInvalid(index, nectarKey(habitat.id))}
                             ariaLabel={`${player.name} ${habitat.label}`}
                           />
                         </td>
@@ -147,16 +173,19 @@ export function ScoreSheet({
                               value={player.scores[goalRoundKey(round)] ?? null}
                               onChange={(value) => setScore(index, goalRoundKey(round), value)}
                               disabled={readOnly}
+                              invalid={isInvalid(index, goalRoundKey(round))}
                               ariaLabel={`${player.name} round ${round} count`}
                             />
                           ) : (
                             <select
-                              className="placement-select"
+                              className={`placement-select${
+                                isInvalid(index, goalRoundKey(round)) ? ' field-invalid' : ''
+                              }`}
                               aria-label={`${player.name} round ${round} placement`}
                               value={placementOf(player.scores[goalRoundKey(round)])}
                               disabled={readOnly}
                               onChange={(event) =>
-                                setScore(index, goalRoundKey(round), Number(event.target.value))
+                                setGoalPlacement(index, round, Number(event.target.value))
                               }
                             >
                               <option value={0}>—</option>
@@ -203,6 +232,7 @@ export function ScoreSheet({
                       onChange={(value) => setScore(index, category.id, value)}
                       disabled={readOnly}
                       signed={category.kind === 'signed'}
+                      invalid={isInvalid(index, category.id)}
                       ariaLabel={`${player.name} ${category.label}`}
                     />
                   </td>
@@ -224,6 +254,7 @@ export function ScoreSheet({
                   value={player.scores[TIEBREAK_KEY] ?? null}
                   onChange={(value) => setScore(index, TIEBREAK_KEY, value)}
                   disabled={readOnly}
+                  invalid={isInvalid(index, TIEBREAK_KEY)}
                   ariaLabel={`${player.name} unused food`}
                 />
               </td>

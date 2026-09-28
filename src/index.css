@@ -1036,6 +1036,14 @@ select {
 .score-input-signed {
   border-color: color-mix(in srgb, var(--nectar) 45%, var(--border));
 }
+.score-input-invalid {
+  border-color: var(--danger);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 30%, transparent);
+}
+.field-invalid {
+  border-color: var(--danger) !important;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 30%, transparent);
+}
 
 .placement-select {
   width: auto;

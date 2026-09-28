@@ -103,6 +103,7 @@ export function GameDetail() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [completeError, setCompleteError] = useState<string | null>(null);
   const [celebrate, setCelebrate] = useState(false);
+  const [showErrors, setShowErrors] = useState(false);
   const previousStatus = useRef<Game['status'] | null>(null);
   const lastSaved = useRef('');
   const initialised = useRef(false);
@@ -305,6 +306,13 @@ export function GameDetail() {
   const winnerNames = computed.winners
     .map((index) => game.players[index]?.name)
     .filter((name): name is string => Boolean(name));
+  const completion = checkComplete(
+    profile,
+    game.players.map((player) => ({ name: player.name, scores: player.scores })),
+  );
+  const invalidFields = showErrors
+    ? new Set(completion.fields.map((field) => `${field.player}:${field.key}`))
+    : new Set<string>();
 
   function update(partial: Partial<Game>) {
     if (readOnly) return;
@@ -312,14 +320,12 @@ export function GameDetail() {
   }
 
   function completeGame() {
-    const check = checkComplete(
-      profile,
-      game.players.map((player) => ({ name: player.name, scores: player.scores })),
-    );
-    if (!check.valid) {
-      setCompleteError(check.error ?? 'The game is not ready to complete.');
+    if (!completion.valid) {
+      setShowErrors(true);
+      setCompleteError(completion.error ?? 'The game is not ready to complete.');
       return;
     }
+    setShowErrors(false);
     setCompleteError(null);
     update({ status: 'completed' });
   }
@@ -441,6 +447,7 @@ export function GameDetail() {
           players={game.players as EditablePlayer[]}
           onChange={(players) => update({ players })}
           knownUserIds={friendIds}
+          invalidFields={invalidFields}
           readOnly={readOnly || isInvited}
         />
         {!readOnly && (

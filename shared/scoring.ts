@@ -291,23 +291,36 @@ export function validateConfig(
  * Checks that a game can be completed: every score field is filled in and the
  * green end-of-round goal placements form a valid ranking.
  */
+export interface CompletenessResult {
+  valid: boolean;
+  error?: string;
+  /** Fields that need attention: player index + raw score key. */
+  fields: { player: number; key: string }[];
+}
+
 export function checkComplete(
   profile: ScoringProfile,
   players: { name: string; scores: ScoreMap }[],
-): ConfigValidation {
+): CompletenessResult {
   const keys = fieldKeys(profile);
-  const missing: string[] = [];
-  for (const player of players) {
+  const fields: { player: number; key: string }[] = [];
+  players.forEach((player, playerIndex) => {
     for (const key of keys) {
       if (typeof player.scores[key] !== 'number') {
-        missing.push(`${player.name}: ${fieldLabel(profile, key)}`);
+        fields.push({ player: playerIndex, key });
       }
     }
-  }
-  if (missing.length > 0) {
-    const shown = missing.slice(0, 4).join(', ');
-    const more = missing.length > 4 ? ` (+${missing.length - 4} more)` : '';
-    return { valid: false, error: `Fill in every score before completing. Missing — ${shown}${more}.` };
+  });
+  if (fields.length > 0) {
+    const labels = fields
+      .slice(0, 4)
+      .map((field) => `${players[field.player]?.name ?? '?'}: ${fieldLabel(profile, field.key)}`);
+    const more = fields.length > 4 ? ` (+${fields.length - 4} more)` : '';
+    return {
+      valid: false,
+      error: `Fill in every score before completing. Missing — ${labels.join(', ')}${more}.`,
+      fields,
+    };
   }
 
   if (profile.goalBoard === 'green') {
@@ -330,6 +343,7 @@ export function checkComplete(
           return {
             valid: false,
             error: `Round ${round} goal placements are inconsistent — a place is missing.`,
+            fields: players.map((_, playerIndex) => ({ player: playerIndex, key })),
           };
         }
         expected += count;
@@ -337,7 +351,7 @@ export function checkComplete(
     }
   }
 
-  return { valid: true };
+  return { valid: true, fields: [] };
 }
 
 function fieldLabel(profile: ScoringProfile, key: string): string {
@@ -521,7 +535,8 @@ export function computePlayerPoints(profile: ScoringProfile, scores: ScoreMap): 
 
 export function emptyScores(profile: ScoringProfile): ScoreMap {
   const scores: ScoreMap = {};
-  for (const key of fieldKeys(profile)) scores[key] = null;
-  scores[TIEBREAK_KEY] = null;
+  // Everything defaults to 0 (counts, goal placements, nectar, tie-break).
+  for (const key of fieldKeys(profile)) scores[key] = 0;
+  scores[TIEBREAK_KEY] = 0;
   return scores;
 }

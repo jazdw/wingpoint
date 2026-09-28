@@ -5,6 +5,8 @@ interface ScoreInputProps {
   ariaLabel?: string;
   /** Allow negative values (e.g. the hummingbird track). */
   signed?: boolean;
+  /** Highlight the field as needing attention. */
+  invalid?: boolean;
 }
 
 export function ScoreInput({
@@ -13,11 +15,16 @@ export function ScoreInput({
   disabled,
   ariaLabel,
   signed = false,
+  invalid = false,
 }: ScoreInputProps) {
   const current = value ?? 0;
 
   return (
-    <div className={`score-input${signed ? ' score-input-signed' : ''}`}>
+    <div
+      className={`score-input${signed ? ' score-input-signed' : ''}${
+        invalid ? ' score-input-invalid' : ''
+      }`}
+    >
       <button
         type="button"
         className="step"
@@ -30,7 +37,7 @@ export function ScoreInput({
       <input
         type="text"
         inputMode={signed ? 'text' : 'numeric'}
-        value={value === null || value === undefined ? '' : String(value)}
+        value={String(value ?? 0)}
         aria-label={ariaLabel}
         disabled={disabled}
         onFocus={(event) => event.currentTarget.select()}

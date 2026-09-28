@@ -209,7 +209,7 @@ function sanitizeScores(profile: ScoringProfile, scores: ScoreMap | undefined): 
 
   const put = (key: string, raw: number | null | undefined, signed = false, max?: number) => {
     if (typeof raw !== 'number' || !Number.isFinite(raw)) {
-      clean[key] = null;
+      clean[key] = 0;
       return;
     }
     let value = Math.round(raw);
