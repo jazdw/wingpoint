@@ -130,8 +130,8 @@ npx wrangler d1 execute wingpoint --remote \
 - **Other players’ stats**: on the Stats page you can pick any account you have
   played a game with. Someone you have never shared a game with is not listed and
   the API refuses to return their stats.
-- **Head to head**: your Stats page shows results against everyone you have
-  played with (linked accounts and named guests).
+- **Head to head**: your Stats page shows results against the linked accounts
+  you have played with (guests aren't tracked head-to-head).
 - **Visibility**: a game can only be seen by its owner and the linked players in
   it. There is no global/group browsing.
 - **Invitations**: linking another account to a game sends them an invitation;

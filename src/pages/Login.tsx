@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { useLocation, useSearchParams } from 'react-router-dom';
 
 const MESSAGES: Record<string, string> = {
   not_allowed: 'That Google account is not on the WingPoint allow-list. Ask the owner to add your email.',
@@ -13,9 +13,20 @@ const MESSAGES: Record<string, string> = {
 
 export function Login() {
   const [params] = useSearchParams();
+  const location = useLocation();
   const error = params.get('auth');
   const [devBusy, setDevBusy] = useState(false);
   const [devError, setDevError] = useState<string | null>(null);
+
+  // While signed out, remember a deep link so we can return to it after login
+  // (and clear it if the user navigates back to the dashboard).
+  useEffect(() => {
+    if (location.pathname === '/') {
+      sessionStorage.removeItem('wp-return-path');
+    } else {
+      sessionStorage.setItem('wp-return-path', location.pathname);
+    }
+  }, [location.pathname]);
 
   async function signInDev() {
     setDevBusy(true);

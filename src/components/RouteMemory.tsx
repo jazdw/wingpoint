@@ -33,12 +33,6 @@ export function RouteMemory() {
 
   useEffect(() => {
     const current = location.pathname + location.search;
-
-    // If we're signed out on a deep link, remember where to come back to.
-    if (!user && location.pathname !== '/') {
-      sessionStorage.setItem(RETURN_PATH_KEY, current);
-    }
-
     localStorage.setItem(LAST_PATH_KEY, current);
 
     if (restored.current) return;

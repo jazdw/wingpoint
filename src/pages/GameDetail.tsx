@@ -92,6 +92,13 @@ export function GameDetail() {
   const myPlayer = serverGame?.players.find((player) => player.userId === user?.id);
   const isInvited = myPlayer?.status === 'pending';
 
+  // Reset the editable copy when moving to a different game (same route,
+  // different :id, e.g. browser back/forward between games).
+  useEffect(() => {
+    initialised.current = false;
+    setDraft(null);
+  }, [id]);
+
   useEffect(() => {
     if (!serverGame) return;
     if (!isOwner || !initialised.current) {
@@ -275,17 +282,6 @@ export function GameDetail() {
         <Link to="/" className="btn btn-ghost btn-sm">
           ← Games
         </Link>
-        <div className="game-toolbar-fields">
-          <label className="field inline">
-            <span className="sr-only">Date</span>
-            <input
-              type="date"
-              value={toDateInput(game.playedAt)}
-              disabled={readOnly}
-              onChange={(event) => update({ playedAt: fromDateInput(event.target.value) })}
-            />
-          </label>
-        </div>
         <div className="game-toolbar-right">
           {readOnly ? (
             <span className="save-state save-live">
@@ -362,6 +358,17 @@ export function GameDetail() {
 
       <div className="card stack-sm">
         <h2>Game setup</h2>
+        {game.status === 'in_progress' && (
+          <label className="field">
+            <span>Date played</span>
+            <input
+              type="date"
+              value={toDateInput(game.playedAt)}
+              disabled={readOnly}
+              onChange={(event) => update({ playedAt: fromDateInput(event.target.value) })}
+            />
+          </label>
+        )}
         <div className="setup-row">
           <span className="setup-label">Expansions</span>
           <div className="chip-list">

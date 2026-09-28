@@ -153,8 +153,9 @@ async function computeStatsForUser(
 
     players.forEach((player, index) => {
       if (index === myIndex) return;
-      const key = player.user_id ?? `name:${player.name.toLowerCase()}`;
-      const rival = rivals.get(key) ?? {
+      // Head-to-head only tracks linked accounts, not guests.
+      if (!player.user_id) return;
+      const rival = rivals.get(player.user_id) ?? {
         name: player.name,
         userId: player.user_id,
         gamesTogether: 0,
@@ -168,7 +169,7 @@ async function computeStatsForUser(
       rival.theirAverage += computed.totals[index] ?? 0;
       if (won) rival.myWins += 1;
       if (winnerIds.has(player.id)) rival.theirWins += 1;
-      rivals.set(key, rival);
+      rivals.set(player.user_id, rival);
     });
   }
 
