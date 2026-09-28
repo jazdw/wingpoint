@@ -9,8 +9,8 @@ front end, Google sign-in (allow-list only) and offline support.
 - **Score sheet** matching the familiar Wingspan layout: Birds, Bonus cards,
   End-of-round goals, Eggs, Cached food, Tucked cards, plus Nectar (Oceania),
   Duet map (Asia) and the hummingbird track (Americas).
-- **Per-round end-of-round goals** with the official point table and
-  tie-splitting rule.
+- **Per-round end-of-round goals**, green (majority, with the official point
+  table and tie-splitting) or blue (one point per item, capped at 5).
 - **Live totals** and automatic winner detection (🏆), broken on ties by unused
   food as per the rulebook.
 - **Auto-save** — every change is saved shortly after you stop typing. While
@@ -115,6 +115,11 @@ npx wrangler d1 execute wingpoint --remote \
   to a group; every member can then see the game and watch it update live, but
   only the **score master** (the account that created the game) can edit or
   delete it. Games not in a group are private to their owner.
+- **Invitations**: linking another account to a game sends them an invitation;
+  the game shows as *Invitation* on their dashboard until they accept or decline.
+  Guests never need to accept.
+- **One in-progress game per user**: you can’t start or accept a game while you
+  already have one in progress. Finish or delete it first.
 - **Live viewing**: while a game is in progress, non-owners poll every 5 seconds
   and the score sheet is read-only for them.
 
@@ -166,8 +171,13 @@ Profiles are defined in `shared/scoring.ts`:
 | `americas`           | Base + **Hummingbird track** (signed points)                            |
 | `americas-oceania`   | Base + **Nectar** + **Hummingbird track**                               |
 
-**End-of-round goals** are entered per round as a placement (1st/2nd/3rd/none)
-and scored with the official table:
+A game is configured from **base game + goal board side (green/blue) + any
+combination of expansions**, plus an Asia mode when Asia is included. Invalid
+combinations (for example Asia without a mode, Duet with more than 2 players, or
+Flock with fewer than 3) are rejected with a message.
+
+**Green end-of-round goals** are entered per round as a placement
+(1st/2nd/3rd/none) and scored with the official table:
 
 | Round | 1st | 2nd | 3rd |
 | ----- | --- | --- | --- |
@@ -178,6 +188,9 @@ and scored with the official table:
 
 Ties combine the points for the places the tied players occupy, divide evenly and
 round down (two players tied for 1st in round 1 each get 2).
+
+**Blue end-of-round goals** are entered per round as the number of targeted items;
+each scores one point, capped at 5 per round.
 
 The official Oceania rule for a tied nectar majority is the same split. Asia
 **Flock mode** instead uses friendly ties (both get the full points and second place
@@ -191,7 +204,6 @@ expansion ids are validated in `worker/games.ts`.
 ### Roadmap
 
 - Solo and Automa scoring helpers (Automa cards and difficulty levels).
-- Blue "one point per item" end-of-round goal board variant.
 - Bird/card database and per-bird stats.
 
 ## Project structure

@@ -1,15 +1,27 @@
 import { Hono } from 'hono';
 import {
   computeGame,
-  DEFAULT_PROFILE_ID,
+  deriveProfile,
   GOAL_ROUNDS,
   goalRoundKey,
-  getProfile,
   nectarKey,
-  PROFILES,
+  normalizeConfig,
   TIEBREAK_KEY,
+  validateConfig,
+  type ScoringProfile,
 } from '../shared/scoring';
-import type { Game, GameMode, GamePlayer, GameStatus, GameSummary, ScoreMap } from '../shared/types';
+import type {
+  AsiaVariant,
+  Game,
+  GameConfig,
+  GameMode,
+  GamePlayer,
+  GameStatus,
+  GameSummary,
+  GoalBoard,
+  PlayerStatus,
+  ScoreMap,
+} from '../shared/types';
 import { requireAuth } from './auth';
 import type { AppEnv, Env } from './env';
 import { isGroupMember } from './groups';
@@ -25,8 +37,9 @@ export interface GameRow {
   played_at: number;
   mode: GameMode;
   status: GameStatus;
-  scoring_profile: string;
   expansions: string;
+  goal_board: string;
+  asia_variant: string;
   notes: string | null;
   created_at: number;
   updated_at: number;
@@ -38,6 +51,7 @@ export interface PlayerRow {
   user_id: string | null;
   name: string;
   seat: number;
+  status: PlayerStatus;
   scores: string;
   points: string;
   total: number;
@@ -52,17 +66,34 @@ function parseJson<T>(value: string | null | undefined, fallback: T): T {
   }
 }
 
+export function configForGame(
+  row: Pick<GameRow, 'expansions' | 'goal_board' | 'asia_variant'>,
+): GameConfig {
+  return normalizeConfig({
+    expansions: parseJson<string[]>(row.expansions, []),
+    goalBoard: row.goal_board === 'blue' ? 'blue' : 'green',
+    asiaVariant:
+      row.asia_variant === 'duet' || row.asia_variant === 'flock' ? row.asia_variant : 'none',
+  });
+}
+
+export function profileForGame(row: GameRow): ScoringProfile {
+  return deriveProfile(configForGame(row));
+}
+
 function serializePlayer(row: PlayerRow): GamePlayer {
   return {
     id: row.id,
     name: row.name,
     userId: row.user_id,
     seat: row.seat,
+    status: row.status === 'pending' ? 'pending' : 'accepted',
     scores: parseJson<ScoreMap>(row.scores, {}),
   };
 }
 
 function serializeGame(row: GameRow, players: PlayerRow[]): Game {
+  const config = configForGame(row);
   return {
     id: row.id,
     ownerId: row.owner_id,
@@ -70,8 +101,9 @@ function serializeGame(row: GameRow, players: PlayerRow[]): Game {
     playedAt: row.played_at,
     mode: row.mode,
     status: row.status,
-    scoringProfile: row.scoring_profile,
-    expansions: parseJson<string[]>(row.expansions, []),
+    expansions: config.expansions,
+    goalBoard: config.goalBoard,
+    asiaVariant: config.asiaVariant,
     notes: row.notes,
     players: players.map(serializePlayer),
     createdAt: row.created_at,
@@ -81,27 +113,29 @@ function serializeGame(row: GameRow, players: PlayerRow[]): Game {
 
 export function serializeSummary(row: GameRow, players: PlayerRow[]): GameSummary {
   const ordered = [...players].sort((a, b) => a.seat - b.seat);
-  const game = {
-    scoringProfile: row.scoring_profile,
-  };
+  const config = configForGame(row);
+  const profile = deriveProfile(config);
   const computed = computeGame(
-    game.scoringProfile,
+    profile,
     ordered.map((player) => ({ scores: parseJson<ScoreMap>(player.scores, {}) })),
   );
   const winners = computed.winners.map((index) => ordered[index]?.id).filter(Boolean) as string[];
   return {
     id: row.id,
+    ownerId: row.owner_id,
     groupId: row.group_id,
     playedAt: row.played_at,
     mode: row.mode,
     status: row.status,
-    scoringProfile: row.scoring_profile,
-    expansions: parseJson<string[]>(row.expansions, []),
+    expansions: config.expansions,
+    goalBoard: config.goalBoard,
+    asiaVariant: config.asiaVariant,
     scored: computed.totals.some((total) => total > 0),
     players: ordered.map((player, index) => ({
       id: player.id,
       name: player.name,
       userId: player.user_id,
+      status: player.status === 'pending' ? 'pending' : 'accepted',
       total: computed.totals[index] ?? 0,
     })),
     winners,
@@ -134,16 +168,59 @@ export async function loadGame(env: Env, id: string): Promise<Game | null> {
   return serializeGame(row, players);
 }
 
-/** SQL selecting games visible to a user (owner or member of the game's group). */
+/** SQL selecting games visible to a user (owner, group member or invited player). */
 export const VISIBLE_GAMES_SQL = `SELECT DISTINCT g.*
    FROM games g
    LEFT JOIN group_members m ON m.group_id = g.group_id AND m.user_id = ?
-  WHERE g.owner_id = ? OR m.user_id IS NOT NULL`;
+   LEFT JOIN game_players gp ON gp.game_id = g.id AND gp.user_id = ?
+  WHERE g.owner_id = ? OR m.user_id IS NOT NULL OR gp.user_id IS NOT NULL`;
+
+export const VISIBLE_GAMES_PARAMS = 3;
 
 export async function canViewGame(env: Env, game: GameRow, userId: string): Promise<boolean> {
   if (game.owner_id === userId) return true;
-  if (!game.group_id) return false;
-  return isGroupMember(env, game.group_id, userId);
+  if (game.group_id && (await isGroupMember(env, game.group_id, userId))) return true;
+  const player = await env.DB.prepare(
+    'SELECT 1 FROM game_players WHERE game_id = ? AND user_id = ?',
+  )
+    .bind(game.id, userId)
+    .first();
+  return Boolean(player);
+}
+
+/**
+ * True when any of the users already has an in-progress game (as owner or an
+ * accepted player), excluding `excludeGameId`.
+ */
+export async function hasInProgressConflict(
+  env: Env,
+  userIds: (string | null | undefined)[],
+  excludeGameId?: string,
+): Promise<boolean> {
+  const ids = [...new Set(userIds.filter((id): id is string => Boolean(id)))];
+  if (ids.length === 0) return false;
+  const placeholders = ids.map(() => '?').join(', ');
+
+  const owner = await env.DB.prepare(
+    `SELECT id FROM games
+      WHERE status = 'in_progress' AND owner_id IN (${placeholders})
+      ${excludeGameId ? 'AND id != ?' : ''}
+      LIMIT 1`,
+  )
+    .bind(...ids, ...(excludeGameId ? [excludeGameId] : []))
+    .first();
+  if (owner) return true;
+
+  const player = await env.DB.prepare(
+    `SELECT gp.game_id FROM game_players gp
+       JOIN games g ON g.id = gp.game_id
+      WHERE g.status = 'in_progress' AND gp.status = 'accepted' AND gp.user_id IN (${placeholders})
+      ${excludeGameId ? 'AND g.id != ?' : ''}
+      LIMIT 1`,
+  )
+    .bind(...ids, ...(excludeGameId ? [excludeGameId] : []))
+    .first();
+  return Boolean(player);
 }
 
 /* ------------------------------------------------------------------ */
@@ -152,7 +229,6 @@ export async function canViewGame(env: Env, game: GameRow, userId: string): Prom
 
 const MODES: GameMode[] = ['competitive', 'solo', 'coop'];
 const STATUSES: GameStatus[] = ['in_progress', 'completed'];
-const KNOWN_EXPANSIONS = new Set(['base', 'european', 'oceania', 'asia', 'americas']);
 
 interface PlayerInput {
   id?: string;
@@ -161,12 +237,7 @@ interface PlayerInput {
   scores?: ScoreMap;
 }
 
-export function isValidProfile(id: unknown): id is string {
-  return typeof id === 'string' && PROFILES.some((profile) => profile.id === id);
-}
-
-function sanitizeScores(profileId: string, scores: ScoreMap | undefined): ScoreMap {
-  const profile = getProfile(profileId);
+function sanitizeScores(profile: ScoringProfile, scores: ScoreMap | undefined): ScoreMap {
   const clean: ScoreMap = {};
 
   const put = (key: string, raw: number | null | undefined, signed = false, max?: number) => {
@@ -191,7 +262,7 @@ function sanitizeScores(profileId: string, scores: ScoreMap | undefined): ScoreM
     } else if (category.kind === 'roundGoals') {
       for (let round = 1; round <= GOAL_ROUNDS; round += 1) {
         const key = goalRoundKey(round);
-        put(key, scores?.[key], false, 3);
+        put(key, scores?.[key], false, profile.goalBoard === 'green' ? 3 : undefined);
       }
     } else {
       put(category.id, scores?.[category.id], category.kind === 'signed');
@@ -202,19 +273,27 @@ function sanitizeScores(profileId: string, scores: ScoreMap | undefined): ScoreM
   return clean;
 }
 
-function normalizePlayers(profileId: string, input: unknown): PlayerInput[] | null {
+/** Validate players and reject duplicate linked accounts. */
+function normalizePlayers(profile: ScoringProfile, input: unknown): PlayerInput[] | null {
   if (!Array.isArray(input) || input.length === 0 || input.length > 8) return null;
   const players: PlayerInput[] = [];
+  const seenUsers = new Set<string>();
+
   for (const entry of input) {
     if (!entry || typeof entry !== 'object') return null;
     const record = entry as Record<string, unknown>;
     const name = typeof record.name === 'string' ? record.name.trim() : '';
     if (!name) return null;
+    const userId = typeof record.userId === 'string' && record.userId ? record.userId : null;
+    if (userId) {
+      if (seenUsers.has(userId)) return null; // each account only once
+      seenUsers.add(userId);
+    }
     players.push({
       id: typeof record.id === 'string' ? record.id : undefined,
       name: name.slice(0, 60),
-      userId: typeof record.userId === 'string' ? record.userId : null,
-      scores: sanitizeScores(profileId, (record.scores as ScoreMap) ?? {}),
+      userId,
+      scores: sanitizeScores(profile, (record.scores as ScoreMap) ?? {}),
     });
   }
   return players;
@@ -223,11 +302,15 @@ function normalizePlayers(profileId: string, input: unknown): PlayerInput[] | nu
 async function writePlayers(
   env: Env,
   gameId: string,
-  profileId: string,
+  profile: ScoringProfile,
+  ownerId: string,
   inputs: PlayerInput[],
-): Promise<GamePlayer[]> {
+): Promise<void> {
+  const existingRows = await loadPlayerRows(env, gameId);
+  const existingStatus = new Map(existingRows.map((row) => [row.id, row.status]));
+
   const computed = computeGame(
-    profileId,
+    profile,
     inputs.map((player) => ({ scores: player.scores ?? {} })),
   );
   const now = Date.now();
@@ -236,32 +319,43 @@ async function writePlayers(
     env.DB.prepare('DELETE FROM game_players WHERE game_id = ?').bind(gameId),
   ];
 
-  const players: GamePlayer[] = inputs.map((input, index) => {
+  inputs.forEach((input, index) => {
     const id = typeof input.id === 'string' && input.id.length > 0 ? input.id : crypto.randomUUID();
-    const scores = input.scores ?? {};
+    // Owner and guests are accepted; other linked accounts must accept.
+    let status: PlayerStatus = 'accepted';
+    if (input.userId && input.userId !== ownerId) {
+      status = existingStatus.get(id) ?? 'pending';
+    }
     statements.push(
       env.DB.prepare(
         `INSERT INTO game_players
-           (id, game_id, user_id, name, seat, scores, points, total, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           (id, game_id, user_id, name, seat, status, scores, points, total, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       ).bind(
         id,
         gameId,
         input.userId ?? null,
         input.name,
         index,
-        JSON.stringify(scores),
+        status,
+        JSON.stringify(input.scores ?? {}),
         JSON.stringify(computed.perPlayer[index] ?? {}),
         computed.totals[index] ?? 0,
         now,
         now,
       ),
     );
-    return { id, name: input.name, userId: input.userId ?? null, seat: index, scores };
   });
 
   await env.DB.batch(statements);
-  return players;
+}
+
+function configFromBody(body: Record<string, unknown>): GameConfig {
+  return normalizeConfig({
+    expansions: Array.isArray(body.expansions) ? (body.expansions as string[]) : [],
+    goalBoard: (body.goalBoard as GoalBoard) ?? 'green',
+    asiaVariant: (body.asiaVariant as AsiaVariant) ?? 'none',
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -277,7 +371,7 @@ gameRoutes.get('/', async (c) => {
   const games = await c.env.DB.prepare(
     `${VISIBLE_GAMES_SQL} ORDER BY g.played_at DESC, g.created_at DESC LIMIT 200`,
   )
-    .bind(user.id, user.id)
+    .bind(user.id, user.id, user.id)
     .all<GameRow>();
   const players = await c.env.DB.prepare('SELECT * FROM game_players').all<PlayerRow>();
 
@@ -296,21 +390,18 @@ gameRoutes.post('/', async (c) => {
   const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body) return c.json({ error: 'Invalid JSON body.' }, 400);
 
-  const profileId = isValidProfile(body.scoringProfile) ? body.scoringProfile : DEFAULT_PROFILE_ID;
-  const players = normalizePlayers(profileId, body.players);
-  if (!players) return c.json({ error: 'A game needs between 1 and 8 named players.' }, 400);
+  const config = configFromBody(body);
+  const profile = deriveProfile(config);
+  const players = normalizePlayers(profile, body.players);
+  if (!players) {
+    return c.json(
+      { error: 'A game needs 1–8 named players, each account only once.' },
+      400,
+    );
+  }
 
-  const mode = MODES.includes(body.mode as GameMode) ? (body.mode as GameMode) : 'competitive';
-  const status = STATUSES.includes(body.status as GameStatus)
-    ? (body.status as GameStatus)
-    : 'in_progress';
-  const playedAt =
-    typeof body.playedAt === 'number' && Number.isFinite(body.playedAt)
-      ? body.playedAt
-      : Date.now();
-  const expansions = Array.isArray(body.expansions)
-    ? body.expansions.filter((value): value is string => typeof value === 'string' && KNOWN_EXPANSIONS.has(value))
-    : getProfile(profileId).expansions;
+  const validation = validateConfig(config, players.length);
+  if (!validation.valid) return c.json({ error: validation.error }, 400);
 
   const user = c.get('user');
   const groupId =
@@ -319,13 +410,32 @@ gameRoutes.post('/', async (c) => {
     return c.json({ error: 'You are not a member of that group.' }, 403);
   }
 
+  const status = STATUSES.includes(body.status as GameStatus)
+    ? (body.status as GameStatus)
+    : 'in_progress';
+  if (status === 'in_progress') {
+    const conflict = await hasInProgressConflict(c.env, [user.id, ...players.map((p) => p.userId)]);
+    if (conflict) {
+      return c.json(
+        { error: 'One of the players already has an in-progress game. Finish it first.' },
+        409,
+      );
+    }
+  }
+
+  const mode = MODES.includes(body.mode as GameMode) ? (body.mode as GameMode) : 'competitive';
+  const playedAt =
+    typeof body.playedAt === 'number' && Number.isFinite(body.playedAt)
+      ? body.playedAt
+      : Date.now();
+
   const id = crypto.randomUUID();
   const now = Date.now();
 
   await c.env.DB.prepare(
     `INSERT INTO games
-       (id, owner_id, group_id, played_at, mode, status, scoring_profile, expansions, notes, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, owner_id, group_id, played_at, mode, status, expansions, goal_board, asia_variant, notes, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       id,
@@ -334,15 +444,16 @@ gameRoutes.post('/', async (c) => {
       playedAt,
       mode,
       status,
-      profileId,
-      JSON.stringify(expansions),
+      JSON.stringify(config.expansions),
+      config.goalBoard,
+      config.asiaVariant,
       typeof body.notes === 'string' ? body.notes.slice(0, 2000) : null,
       now,
       now,
     )
     .run();
 
-  await writePlayers(c.env, id, profileId, players);
+  await writePlayers(c.env, id, profile, user.id, players);
   const game = await loadGame(c.env, id);
   return c.json({ game }, 201);
 });
@@ -360,17 +471,19 @@ gameRoutes.patch('/:id', async (c) => {
   const id = c.req.param('id');
   const existing = await loadGameRow(c.env, id);
   if (!existing) return c.json({ error: 'Game not found.' }, 404);
-  if (existing.owner_id !== c.get('user').id) {
+  const user = c.get('user');
+  if (existing.owner_id !== user.id) {
     return c.json({ error: 'Only the score master can edit this game.' }, 403);
   }
 
   const body = (await c.req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body) return c.json({ error: 'Invalid JSON body.' }, 400);
 
-  const profileId = isValidProfile(body.scoringProfile)
-    ? body.scoringProfile
-    : existing.scoring_profile;
-  const profileChanged = profileId !== existing.scoring_profile;
+  const config = body.expansions !== undefined || body.goalBoard !== undefined || body.asiaVariant !== undefined
+    ? configFromBody(body)
+    : configForGame(existing);
+  const profile = deriveProfile(config);
+  const configChanged = profile.id !== profileForGame(existing).id;
 
   const mode = MODES.includes(body.mode as GameMode) ? (body.mode as GameMode) : existing.mode;
   const status = STATUSES.includes(body.status as GameStatus)
@@ -380,11 +493,7 @@ gameRoutes.patch('/:id', async (c) => {
     typeof body.playedAt === 'number' && Number.isFinite(body.playedAt)
       ? body.playedAt
       : existing.played_at;
-  const expansions = Array.isArray(body.expansions)
-    ? body.expansions.filter((value): value is string => typeof value === 'string' && KNOWN_EXPANSIONS.has(value))
-    : parseJson<string[]>(existing.expansions, []);
-  const notes =
-    typeof body.notes === 'string' ? body.notes.slice(0, 2000) : existing.notes;
+  const notes = typeof body.notes === 'string' ? body.notes.slice(0, 2000) : existing.notes;
 
   const groupId =
     typeof body.groupId === 'string' && body.groupId.length > 0
@@ -392,33 +501,70 @@ gameRoutes.patch('/:id', async (c) => {
       : body.groupId === null
         ? null
         : existing.group_id;
-  if (
-    groupId &&
-    groupId !== existing.group_id &&
-    !(await isGroupMember(c.env, groupId, c.get('user').id))
-  ) {
+  if (groupId && groupId !== existing.group_id && !(await isGroupMember(c.env, groupId, user.id))) {
     return c.json({ error: 'You are not a member of that group.' }, 403);
+  }
+
+  // Validate the player list (if provided) and the config against it.
+  let inputs: PlayerInput[] | null = null;
+  if (body.players !== undefined) {
+    inputs = normalizePlayers(profile, body.players);
+    if (!inputs) {
+      return c.json({ error: 'A game needs 1–8 named players, each account only once.' }, 400);
+    }
+  }
+
+  const playerCount =
+    inputs?.length ??
+    (await c.env.DB.prepare('SELECT COUNT(*) AS count FROM game_players WHERE game_id = ?')
+      .bind(id)
+      .first<{ count: number }>())?.count ??
+    0;
+  const validation = validateConfig(config, playerCount);
+  if (!validation.valid) return c.json({ error: validation.error }, 400);
+
+  if (status === 'in_progress') {
+    const ids = inputs
+      ? [user.id, ...inputs.map((player) => player.userId)]
+      : [user.id];
+    if (await hasInProgressConflict(c.env, ids, id)) {
+      return c.json(
+        { error: 'One of the players already has an in-progress game. Finish it first.' },
+        409,
+      );
+    }
   }
 
   const now = Date.now();
   await c.env.DB.prepare(
     `UPDATE games
-        SET played_at = ?, mode = ?, status = ?, scoring_profile = ?, expansions = ?, notes = ?, group_id = ?, updated_at = ?
+        SET played_at = ?, mode = ?, status = ?, expansions = ?, goal_board = ?, asia_variant = ?,
+            notes = ?, group_id = ?, updated_at = ?
       WHERE id = ?`,
   )
-    .bind(playedAt, mode, status, profileId, JSON.stringify(expansions), notes, groupId, now, id)
+    .bind(
+      playedAt,
+      mode,
+      status,
+      JSON.stringify(config.expansions),
+      config.goalBoard,
+      config.asiaVariant,
+      notes,
+      groupId,
+      now,
+      id,
+    )
     .run();
 
-  if (body.players !== undefined) {
-    const players = normalizePlayers(profileId, body.players);
-    if (!players) return c.json({ error: 'A game needs between 1 and 8 named players.' }, 400);
-    await writePlayers(c.env, id, profileId, players);
-  } else if (profileChanged) {
+  if (inputs) {
+    await writePlayers(c.env, id, profile, existing.owner_id, inputs);
+  } else if (configChanged) {
     const rows = await loadPlayerRows(c.env, id);
     await writePlayers(
       c.env,
       id,
-      profileId,
+      profile,
+      existing.owner_id,
       rows.map((row) => ({
         id: row.id,
         name: row.name,
@@ -430,6 +576,51 @@ gameRoutes.patch('/:id', async (c) => {
 
   const game = await loadGame(c.env, id);
   return c.json({ game });
+});
+
+gameRoutes.post('/:id/accept', async (c) => {
+  const id = c.req.param('id');
+  const user = c.get('user');
+  const row = await loadGameRow(c.env, id);
+  if (!row || !(await canViewGame(c.env, row, user.id))) {
+    return c.json({ error: 'Game not found.' }, 404);
+  }
+
+  const player = await c.env.DB.prepare(
+    'SELECT * FROM game_players WHERE game_id = ? AND user_id = ?',
+  )
+    .bind(id, user.id)
+    .first<PlayerRow>();
+  if (!player) return c.json({ error: 'You are not invited to this game.' }, 400);
+  if (player.status === 'accepted') return c.json({ game: await loadGame(c.env, id) });
+
+  if (row.status === 'in_progress' && (await hasInProgressConflict(c.env, [user.id], id))) {
+    return c.json(
+      { error: 'You already have an in-progress game. Finish it before joining another.' },
+      409,
+    );
+  }
+
+  await c.env.DB.prepare('UPDATE game_players SET status = ?, updated_at = ? WHERE id = ?')
+    .bind('accepted', Date.now(), player.id)
+    .run();
+  return c.json({ game: await loadGame(c.env, id) });
+});
+
+gameRoutes.post('/:id/decline', async (c) => {
+  const id = c.req.param('id');
+  const user = c.get('user');
+  const player = await c.env.DB.prepare(
+    'SELECT * FROM game_players WHERE game_id = ? AND user_id = ?',
+  )
+    .bind(id, user.id)
+    .first<PlayerRow>();
+  if (!player) return c.json({ error: 'You are not invited to this game.' }, 400);
+  if (player.status === 'accepted') {
+    return c.json({ error: 'You have already joined this game.' }, 400);
+  }
+  await c.env.DB.prepare('DELETE FROM game_players WHERE id = ?').bind(player.id).run();
+  return c.json({ ok: true });
 });
 
 gameRoutes.delete('/:id', async (c) => {

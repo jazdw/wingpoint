@@ -1,12 +1,13 @@
 import { Fragment } from 'react';
 import {
+  BLUE_GOAL_CAP,
   computeGame,
   GOAL_PLACES,
   GOAL_ROUNDS,
-  getProfile,
   goalRoundKey,
   nectarKey,
   TIEBREAK_KEY,
+  type ScoringProfile,
 } from '../../shared/scoring';
 import type { ScoreMap } from '../../shared/types';
 import { ScoreInput } from './ScoreInput';
@@ -15,11 +16,12 @@ export interface EditablePlayer {
   id: string;
   name: string;
   userId: string | null;
+  status: 'pending' | 'accepted';
   scores: ScoreMap;
 }
 
 interface ScoreSheetProps {
-  profileId: string;
+  profile: ScoringProfile;
   players: EditablePlayer[];
   onChange: (players: EditablePlayer[]) => void;
   onRemovePlayer?: (index: number) => void;
@@ -32,14 +34,13 @@ function placementOf(value: number | null | undefined): number {
 }
 
 export function ScoreSheet({
-  profileId,
+  profile,
   players,
   onChange,
   onRemovePlayer,
   readOnly = false,
 }: ScoreSheetProps) {
-  const profile = getProfile(profileId);
-  const computed = computeGame(profileId, players);
+  const computed = computeGame(profile, players);
   const winnerSet = new Set(computed.winners);
 
   function setScore(playerIndex: number, key: string, value: number | null) {
@@ -76,6 +77,7 @@ export function ScoreSheet({
                       onFocus={(event) => event.currentTarget.select()}
                     />
                   )}
+                  {player.status === 'pending' && <span className="badge badge-warn">invited</span>}
                   <div className="player-total-badge">
                     {winnerSet.has(index) && <span aria-label="Winner">🏆</span>}
                     <span>{computed.totals[index] ?? 0}</span>
@@ -134,35 +136,52 @@ export function ScoreSheet({
             }
 
             if (category.kind === 'roundGoals') {
+              const blue = profile.goalBoard === 'blue';
               return (
                 <Fragment key={category.id}>
                   <tr className="group-row">
                     <td colSpan={players.length + 1}>
                       <span className="group-title">{category.label}</span>
-                      <span className="muted">1st / 2nd / 3rd per round · ties split points</span>
+                      <span className="muted">
+                        {blue
+                          ? `blue board · 1 pt per item, max ${BLUE_GOAL_CAP} per round`
+                          : 'green board · 1st / 2nd / 3rd per round · ties split points'}
+                      </span>
                     </td>
                   </tr>
                   {Array.from({ length: GOAL_ROUNDS }, (_, index) => index + 1).map((round) => (
                     <tr key={round}>
-                      <td className="cat-label sub">Round {round}</td>
+                      <td className="cat-label sub">
+                        Round {round}
+                        {blue ? ' count' : ''}
+                      </td>
                       {players.map((player, index) => (
                         <td key={player.id}>
-                          <select
-                            className="placement-select"
-                            aria-label={`${player.name} round ${round} placement`}
-                            value={placementOf(player.scores[goalRoundKey(round)])}
-                            disabled={readOnly}
-                            onChange={(event) =>
-                              setScore(index, goalRoundKey(round), Number(event.target.value))
-                            }
-                          >
-                            <option value={0}>—</option>
-                            {GOAL_PLACES.map((place) => (
-                              <option key={place.value} value={place.value}>
-                                {place.label}
-                              </option>
-                            ))}
-                          </select>
+                          {blue ? (
+                            <ScoreInput
+                              value={player.scores[goalRoundKey(round)] ?? null}
+                              onChange={(value) => setScore(index, goalRoundKey(round), value)}
+                              disabled={readOnly}
+                              ariaLabel={`${player.name} round ${round} count`}
+                            />
+                          ) : (
+                            <select
+                              className="placement-select"
+                              aria-label={`${player.name} round ${round} placement`}
+                              value={placementOf(player.scores[goalRoundKey(round)])}
+                              disabled={readOnly}
+                              onChange={(event) =>
+                                setScore(index, goalRoundKey(round), Number(event.target.value))
+                              }
+                            >
+                              <option value={0}>—</option>
+                              {GOAL_PLACES.map((place) => (
+                                <option key={place.value} value={place.value}>
+                                  {place.label}
+                                </option>
+                              ))}
+                            </select>
+                          )}
                         </td>
                       ))}
                     </tr>

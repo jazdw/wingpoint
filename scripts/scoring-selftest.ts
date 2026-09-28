@@ -1,6 +1,12 @@
 // Quick self-test for the shared scoring engine. Run with:
 //   node --experimental-strip-types scripts/scoring-selftest.ts
-import { computeGame, TIEBREAK_KEY } from '../shared/scoring.ts';
+import {
+  computeGame,
+  deriveProfile,
+  normalizeConfig,
+  TIEBREAK_KEY,
+  validateConfig,
+} from '../shared/scoring.ts';
 
 let failures = 0;
 
@@ -14,9 +20,15 @@ function check(label: string, actual: unknown, expected: unknown) {
   }
 }
 
-const forest = (counts: number[], profileId = 'oceania') => {
+const profile = (
+  expansions: string[],
+  goalBoard: 'green' | 'blue' = 'green',
+  asiaVariant: 'none' | 'duet' | 'flock' = 'none',
+) => deriveProfile(normalizeConfig({ expansions, goalBoard, asiaVariant }));
+
+const forest = (counts: number[], expansions = ['oceania'], board: 'green' | 'blue' = 'green') => {
   const players = counts.map((n) => ({ scores: { nectar_forest: n } as Record<string, number | null> }));
-  const { perPlayer } = computeGame(profileId, players);
+  const { perPlayer } = computeGame(profile(expansions, board), players);
   return perPlayer.map((points) => points.nectar);
 };
 
@@ -27,24 +39,37 @@ check('nectar two tied first split', forest([3, 3, 1]), [3, 3, 0]);
 check('nectar three tied first', forest([3, 3, 3]), [2, 2, 2]);
 check('nectar tie for second splits 2+0', forest([5, 3, 3]), [5, 1, 1]);
 check('nectar zeros never score', forest([0, 0, 0]), [0, 0, 0]);
-check('flock nectar friendly ties', forest([3, 3, 1], 'asia-flock-oceania'), [5, 5, 2]);
+check(
+  'flock nectar friendly ties',
+  computeGame(
+    profile(['oceania', 'asia'], 'green', 'flock'),
+    [3, 3, 1].map((n) => ({ scores: { nectar_forest: n } as Record<string, number | null> })),
+  ).perPlayer.map((points) => points.nectar),
+  [5, 5, 2],
+);
 
-// End-of-round goals, official table with tie splitting.
-const goalPoints = (placements: number[], round: number, profileId = 'base') => {
+// Green end-of-round goals, official table with tie splitting.
+const goalPoints = (placements: number[], round: number, expansions: string[] = []) => {
   const players = placements.map((place) => ({
     scores: { [`goalR${round}`]: place } as Record<string, number | null>,
   }));
-  const { perPlayer } = computeGame(profileId, players);
+  const { perPlayer } = computeGame(profile(expansions), players);
   return perPlayer.map((points) => points.endOfRoundGoals);
 };
-check('round goal placements 1/2/3', goalPoints([1, 2, 3], 1), [4, 1, 0]);
-check('round goal two tied first split 4+1', goalPoints([1, 1], 1), [2, 2]);
-check('round goal one first, two tied second', goalPoints([1, 2, 2], 1), [4, 0, 0]);
-check('round goal three tied first round 4', goalPoints([1, 1, 1], 4), [4, 4, 4]);
-check('round goal none scores 0', goalPoints([0, 0], 1), [0, 0]);
+check('green goals 1/2/3', goalPoints([1, 2, 3], 1), [4, 1, 0]);
+check('green goals two tied first split 4+1', goalPoints([1, 1], 1), [2, 2]);
+check('green goals one first, two tied second', goalPoints([1, 2, 2], 1), [4, 0, 0]);
+check('green goals three tied first round 4', goalPoints([1, 1, 1], 4), [4, 4, 4]);
+check('green goals none scores 0', goalPoints([0, 0], 1), [0, 0]);
 
-// Base total: bird/bonus/egg/food/tuck plus goals 4+5+6+7.
-const baseTotal = computeGame('base', [
+// Blue end-of-round goals: one point per item, capped at 5.
+const blueTotal = computeGame(profile([], 'blue'), [
+  { scores: { goalR1: 3, goalR2: 6, goalR3: 2, goalR4: 10 } },
+]);
+check('blue goals cap at 5', blueTotal.perPlayer.map((points) => points.endOfRoundGoals), [15]);
+
+// Base total: bird/bonus/egg/food/tuck plus green goals 4+5+6+7.
+const baseTotal = computeGame(profile([]), [
   {
     scores: {
       birds: 30,
@@ -64,14 +89,14 @@ check('base total', baseTotal.totals, [76]);
 // Americas signed hummingbird track.
 check(
   'signed hummingbird subtracts',
-  computeGame('americas', [{ scores: { birds: 50, hummingbirdTrack: -3 } }]).totals,
+  computeGame(profile(['americas']), [{ scores: { birds: 50, hummingbirdTrack: -3 } }]).totals,
   [47],
 );
 
 // Unused food breaks a tie for the win.
 check(
   'tiebreak: higher unused food wins',
-  computeGame('base', [
+  computeGame(profile([]), [
     { scores: { birds: 50, [TIEBREAK_KEY]: 1 } as Record<string, number | null> },
     { scores: { birds: 50, [TIEBREAK_KEY]: 4 } as Record<string, number | null> },
     { scores: { birds: 40, [TIEBREAK_KEY]: 9 } as Record<string, number | null> },
@@ -80,11 +105,36 @@ check(
 );
 check(
   'tiebreak: still tied shares the win',
-  computeGame('base', [
+  computeGame(profile([]), [
     { scores: { birds: 50, [TIEBREAK_KEY]: 2 } as Record<string, number | null> },
     { scores: { birds: 50, [TIEBREAK_KEY]: 2 } as Record<string, number | null> },
   ]).winners,
   [0, 1],
+);
+
+// Config validation.
+check(
+  'duet needs exactly 2 players',
+  validateConfig(normalizeConfig({ expansions: ['asia'], goalBoard: 'green', asiaVariant: 'duet' }), 3)
+    .valid,
+  false,
+);
+check(
+  'flock needs 3+ players',
+  validateConfig(normalizeConfig({ expansions: ['asia'], goalBoard: 'green', asiaVariant: 'flock' }), 2)
+    .valid,
+  false,
+);
+check(
+  'asia needs a mode',
+  validateConfig(normalizeConfig({ expansions: ['asia'], goalBoard: 'green', asiaVariant: 'none' }), 4)
+    .valid,
+  false,
+);
+check(
+  'base config is valid',
+  validateConfig(normalizeConfig({ expansions: [], goalBoard: 'blue', asiaVariant: 'none' }), 4).valid,
+  true,
 );
 
 if (failures > 0) {

@@ -5,15 +5,26 @@
 
 export type GameMode = 'competitive' | 'solo' | 'coop';
 export type GameStatus = 'in_progress' | 'completed';
+export type GoalBoard = 'green' | 'blue';
+export type AsiaVariant = 'none' | 'duet' | 'flock';
+export type PlayerStatus = 'pending' | 'accepted';
 
 /** Raw scores keyed by score field id (see shared/scoring.ts). */
 export type ScoreMap = Record<string, number | null>;
+
+export interface GameConfig {
+  /** Expansion ids mixed with the base game (see EXPANSIONS). */
+  expansions: string[];
+  goalBoard: GoalBoard;
+  asiaVariant: AsiaVariant;
+}
 
 export interface GamePlayer {
   id: string;
   name: string;
   userId: string | null;
   seat?: number;
+  status: PlayerStatus;
   scores: ScoreMap;
 }
 
@@ -24,8 +35,9 @@ export interface Game {
   playedAt: number;
   mode: GameMode;
   status: GameStatus;
-  scoringProfile: string;
   expansions: string[];
+  goalBoard: GoalBoard;
+  asiaVariant: AsiaVariant;
   notes: string | null;
   players: GamePlayer[];
   createdAt: number;
@@ -35,17 +47,20 @@ export interface Game {
 /** A lightweight game representation used by list views. */
 export interface GameSummary {
   id: string;
+  ownerId: string;
   groupId: string | null;
   playedAt: number;
   mode: GameMode;
   status: GameStatus;
-  scoringProfile: string;
   expansions: string[];
+  goalBoard: GoalBoard;
+  asiaVariant: AsiaVariant;
   scored: boolean;
   players: {
     id: string;
     name: string;
     userId: string | null;
+    status: PlayerStatus;
     total: number;
   }[];
   winners: string[];
@@ -76,7 +91,7 @@ export interface Group {
   members: GroupMember[];
 }
 
-export interface StatsBucket {
+export interface RankingBucket {
   games: number;
   wins: number;
   averageScore: number;

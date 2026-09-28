@@ -3,8 +3,13 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
-import { DEFAULT_PROFILE_ID, PROFILES } from '../../shared/scoring';
-import type { Game, GameMode, Group, PublicUser } from '../../shared/types';
+import {
+  deriveProfile,
+  normalizeConfig,
+  SELECTABLE_EXPANSIONS,
+  validateConfig,
+} from '../../shared/scoring';
+import type { AsiaVariant, Game, GameMode, GoalBoard, Group, PublicUser } from '../../shared/types';
 import { fromDateInput, toDateInput } from '../lib/format';
 
 interface DraftPlayer {
@@ -30,11 +35,19 @@ export function NewGame() {
   const [groupId, setGroupId] = useState('');
   const [playedAt, setPlayedAt] = useState(() => Date.now());
   const [mode, setMode] = useState<GameMode>('competitive');
-  const [profileId, setProfileId] = useState(DEFAULT_PROFILE_ID);
+  const [expansions, setExpansions] = useState<string[]>([]);
+  const [goalBoard, setGoalBoard] = useState<GoalBoard>('green');
+  const [asiaVariant, setAsiaVariant] = useState<AsiaVariant>('none');
   const [players, setPlayers] = useState<DraftPlayer[]>([
     { id: crypto.randomUUID(), name: user?.name ?? 'Player 1', userId: user?.id ?? null },
   ]);
   const [error, setError] = useState<string | null>(null);
+
+  const config = normalizeConfig({ expansions, goalBoard, asiaVariant });
+  const profile = deriveProfile(config);
+  const validation = validateConfig(config, players.length);
+  const selectedUserIds = new Set(players.map((player) => player.userId).filter(Boolean) as string[]);
+  const hasDuplicateUsers = selectedUserIds.size !== players.filter((p) => p.userId).length;
 
   const create = useMutation({
     mutationFn: (body: unknown) =>
@@ -80,6 +93,16 @@ export function NewGame() {
     setPlayers((prev) => prev.filter((_, i) => i !== index));
   }
 
+  function toggleExpansion(expansionId: string) {
+    setExpansions((prev) => {
+      const next = prev.includes(expansionId)
+        ? prev.filter((value) => value !== expansionId)
+        : [...prev, expansionId];
+      if (!next.includes('asia')) setAsiaVariant('none');
+      return next;
+    });
+  }
+
   function submit() {
     setError(null);
     const cleanPlayers = players
@@ -89,10 +112,21 @@ export function NewGame() {
       setError('Add at least one player.');
       return;
     }
+    const accounts = cleanPlayers.map((player) => player.userId).filter(Boolean);
+    if (new Set(accounts).size !== accounts.length) {
+      setError('Each account can only be added once.');
+      return;
+    }
+    if (!validation.valid) {
+      setError(validation.error ?? 'Invalid game setup.');
+      return;
+    }
     create.mutate({
       playedAt,
       mode,
-      scoringProfile: profileId,
+      expansions: config.expansions,
+      goalBoard: config.goalBoard,
+      asiaVariant: config.asiaVariant,
       groupId: groupId || null,
       players: cleanPlayers,
     });
@@ -132,19 +166,55 @@ export function NewGame() {
           </label>
         </div>
 
-        <label className="field">
-          <span>Scoring / expansions</span>
-          <select value={profileId} onChange={(event) => setProfileId(event.target.value)}>
-            {PROFILES.map((profile) => (
-              <option key={profile.id} value={profile.id}>
-                {profile.name}
-              </option>
+        <div className="setup-row">
+          <span className="setup-label">Base game + expansions</span>
+          <div className="chip-list">
+            <span className="chip chip-static">Base</span>
+            {SELECTABLE_EXPANSIONS.map((expansion) => (
+              <button
+                key={expansion.id}
+                type="button"
+                className={`chip${config.expansions.includes(expansion.id) ? ' chip-on' : ''}`}
+                onClick={() => toggleExpansion(expansion.id)}
+              >
+                {expansion.short}
+              </button>
             ))}
-          </select>
-          <small className="muted">
-            {PROFILES.find((profile) => profile.id === profileId)?.description}
-          </small>
-        </label>
+          </div>
+        </div>
+
+        <div className="setup-row">
+          <span className="setup-label">Goal board</span>
+          <div className="segmented">
+            {(['green', 'blue'] as GoalBoard[]).map((board) => (
+              <button
+                key={board}
+                type="button"
+                className={config.goalBoard === board ? 'active' : ''}
+                onClick={() => setGoalBoard(board)}
+              >
+                {board === 'green' ? 'Green (majority)' : 'Blue (per item)'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {config.expansions.includes('asia') && (
+          <label className="field">
+            <span>Asia mode</span>
+            <select
+              value={asiaVariant}
+              onChange={(event) => setAsiaVariant(event.target.value as AsiaVariant)}
+            >
+              <option value="none">Choose a mode…</option>
+              <option value="duet">Duet — exactly 2 players</option>
+              <option value="flock">Flock — 3 or more players</option>
+            </select>
+          </label>
+        )}
+
+        {!validation.valid && <p className="alert alert-error">{validation.error}</p>}
+        <p className="fine-print">{profile.name}</p>
 
         {(groupsQuery.data?.groups.length ?? 0) > 0 && (
           <label className="field">
@@ -189,8 +259,13 @@ export function NewGame() {
             >
               <option value="">Guest</option>
               {users.map((account) => (
-                <option key={account.id} value={account.id}>
+                <option
+                  key={account.id}
+                  value={account.id}
+                  disabled={selectedUserIds.has(account.id) && player.userId !== account.id}
+                >
                   {account.name}
+                  {selectedUserIds.has(account.id) && player.userId !== account.id ? ' (already added)' : ''}
                 </option>
               ))}
             </select>
@@ -205,19 +280,21 @@ export function NewGame() {
           </div>
         ))}
         <p className="fine-print">
-          Linking a player to an account lets WingPoint attribute personal stats. Players without an
-          account are tracked by name.
+          Linking a player to an account lets WingPoint attribute personal stats. They’ll be invited to
+          accept before the game starts counting for them. Guests are tracked by name.
         </p>
       </div>
 
-      {error && <p className="alert alert-error">{error}</p>}
+      {(error || hasDuplicateUsers) && (
+        <p className="alert alert-error">{error ?? 'Each account can only be added once.'}</p>
+      )}
 
       <div className="actions">
         <button
           type="button"
           className="btn btn-primary btn-block"
           onClick={submit}
-          disabled={create.isPending}
+          disabled={create.isPending || hasDuplicateUsers || !validation.valid}
         >
           {create.isPending ? 'Creating…' : 'Start game'}
         </button>

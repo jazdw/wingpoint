@@ -4,19 +4,46 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth, useOnline } from '../auth';
 import { ScoreSheet, type EditablePlayer } from '../components/ScoreSheet';
-import { emptyScores, fieldKeys, getProfile, PROFILES, TIEBREAK_KEY } from '../../shared/scoring';
-import type { Game, GameMode, GameStatus, Group, PublicUser, ScoreMap } from '../../shared/types';
+import {
+  deriveProfile,
+  emptyScores,
+  fieldKeys,
+  normalizeConfig,
+  SELECTABLE_EXPANSIONS,
+  TIEBREAK_KEY,
+  validateConfig,
+} from '../../shared/scoring';
+import type {
+  AsiaVariant,
+  Game,
+  GameConfig,
+  GameMode,
+  GameStatus,
+  GoalBoard,
+  Group,
+  PublicUser,
+  ScoreMap,
+} from '../../shared/types';
 import { formatDateTime, fromDateInput, toDateInput } from '../lib/format';
 
 type SaveState = 'saved' | 'saving' | 'offline' | 'error';
+
+function gameConfig(game: Game): GameConfig {
+  return normalizeConfig({
+    expansions: game.expansions,
+    goalBoard: game.goalBoard,
+    asiaVariant: game.asiaVariant,
+  });
+}
 
 function toPayload(game: Game) {
   return {
     playedAt: game.playedAt,
     mode: game.mode,
     status: game.status,
-    scoringProfile: game.scoringProfile,
     expansions: game.expansions,
+    goalBoard: game.goalBoard,
+    asiaVariant: game.asiaVariant,
     notes: game.notes,
     players: game.players.map((player) => ({
       id: player.id,
@@ -46,7 +73,6 @@ export function GameDetail() {
     queryKey: ['game', id],
     queryFn: () => api<{ game: Game }>(`/api/games/${id}`),
     enabled: Boolean(id),
-    // Non-owners watching an in-progress game poll for live updates.
     refetchInterval: (query) => {
       const game = query.state.data?.game;
       if (game && game.ownerId !== user?.id && game.status === 'in_progress') return 5000;
@@ -71,6 +97,8 @@ export function GameDetail() {
   const serverGame = gameQuery.data?.game;
   const isOwner = Boolean(serverGame && user && serverGame.ownerId === user.id);
   const readOnly = Boolean(serverGame) && !isOwner;
+  const myPlayer = serverGame?.players.find((player) => player.userId === user?.id);
+  const isInvited = myPlayer?.status === 'pending';
 
   useEffect(() => {
     if (!serverGame) return;
@@ -134,6 +162,22 @@ export function GameDetail() {
     },
   });
 
+  const accept = useMutation({
+    mutationFn: () => api(`/api/games/${id}/accept`, { method: 'POST' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['game', id] });
+      queryClient.invalidateQueries({ queryKey: ['games'] });
+    },
+  });
+
+  const decline = useMutation({
+    mutationFn: () => api(`/api/games/${id}/decline`, { method: 'POST' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['games'] });
+      navigate('/');
+    },
+  });
+
   if (gameQuery.isLoading && !draft) {
     return <div className="page-loading">Loading game…</div>;
   }
@@ -154,7 +198,9 @@ export function GameDetail() {
   }
 
   const game = readOnly && serverGame ? serverGame : draft!;
-  const profile = getProfile(game.scoringProfile);
+  const config = gameConfig(game);
+  const profile = deriveProfile(config);
+  const validation = validateConfig(config, game.players.length);
   const ownerName = usersQuery.data?.users.find((account) => account.id === game.ownerId)?.name;
   const groupName = game.groupId
     ? groupsQuery.data?.groups.find((group) => group.id === game.groupId)?.name
@@ -165,27 +211,49 @@ export function GameDetail() {
     setDraft((prev) => (prev ? { ...prev, ...partial } : prev));
   }
 
-  function changeProfile(nextProfileId: string) {
+  function changeConfig(patch: Partial<GameConfig>) {
     if (readOnly) return;
-    const nextProfile = getProfile(nextProfileId);
-    const keys = fieldKeys(nextProfile);
     setDraft((prev) => {
       if (!prev) return prev;
+      const nextConfig = normalizeConfig({
+        expansions: patch.expansions ?? prev.expansions,
+        goalBoard: patch.goalBoard ?? prev.goalBoard,
+        asiaVariant: patch.asiaVariant ?? prev.asiaVariant,
+      });
+      const nextProfile = deriveProfile(nextConfig);
+      const keys = fieldKeys(nextProfile);
+      const boardChanged = nextConfig.goalBoard !== prev.goalBoard;
+      const players = prev.players.map((player) => {
+        const scores: ScoreMap = {};
+        for (const key of keys) {
+          scores[key] =
+            boardChanged && key.startsWith('goalR')
+              ? null
+              : typeof player.scores[key] === 'number'
+                ? player.scores[key]
+                : null;
+        }
+        scores[TIEBREAK_KEY] =
+          typeof player.scores[TIEBREAK_KEY] === 'number' ? player.scores[TIEBREAK_KEY] : null;
+        return { ...player, scores };
+      });
       return {
         ...prev,
-        scoringProfile: nextProfileId,
-        expansions: nextProfile.expansions,
-        players: prev.players.map((player) => {
-          const scores: ScoreMap = {};
-          for (const key of keys) {
-            scores[key] = typeof player.scores[key] === 'number' ? player.scores[key] : null;
-          }
-          scores[TIEBREAK_KEY] =
-            typeof player.scores[TIEBREAK_KEY] === 'number' ? player.scores[TIEBREAK_KEY] : null;
-          return { ...player, scores };
-        }),
+        expansions: nextConfig.expansions,
+        goalBoard: nextConfig.goalBoard,
+        asiaVariant: nextConfig.asiaVariant,
+        players,
       };
     });
+  }
+
+  function toggleExpansion(expansionId: string) {
+    const next = config.expansions.includes(expansionId)
+      ? config.expansions.filter((value) => value !== expansionId)
+      : [...config.expansions, expansionId];
+    const patch: Partial<GameConfig> = { expansions: next };
+    if (!next.includes('asia')) patch.asiaVariant = 'none';
+    changeConfig(patch);
   }
 
   function addPlayer() {
@@ -200,7 +268,8 @@ export function GameDetail() {
             id: crypto.randomUUID(),
             name: `Player ${prev.players.length + 1}`,
             userId: null,
-            scores: emptyScores(getProfile(prev.scoringProfile)),
+            status: 'accepted',
+            scores: emptyScores(deriveProfile(gameConfig(prev))),
           },
         ],
       };
@@ -229,20 +298,6 @@ export function GameDetail() {
               disabled={readOnly}
               onChange={(event) => update({ playedAt: fromDateInput(event.target.value) })}
             />
-          </label>
-          <label className="field inline">
-            <span className="sr-only">Scoring profile</span>
-            <select
-              value={game.scoringProfile}
-              disabled={readOnly}
-              onChange={(event) => changeProfile(event.target.value)}
-            >
-              {PROFILES.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.name}
-                </option>
-              ))}
-            </select>
           </label>
           <label className="field inline">
             <span className="sr-only">Mode</span>
@@ -300,10 +355,36 @@ export function GameDetail() {
         </div>
       </div>
 
+      {isInvited && (
+        <div className="card invite-banner">
+          <div>
+            <strong>{ownerName ?? 'The score master'}</strong> invited you to this game.
+          </div>
+          <div className="actions">
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              disabled={accept.isPending}
+              onClick={() => accept.mutate()}
+            >
+              {accept.isPending ? 'Joining…' : 'Accept'}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              disabled={decline.isPending}
+              onClick={() => decline.mutate()}
+            >
+              Decline
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="game-header">
         <h1>{profile.name}</h1>
         <p className="muted">
-          {formatDateTime(game.playedAt)} · {game.expansions.join(' · ')}
+          {formatDateTime(game.playedAt)}
           {groupName ? ` · ${groupName}` : ''}
         </p>
         <p className="fine-print">
@@ -312,12 +393,67 @@ export function GameDetail() {
         </p>
       </div>
 
+      <div className="card stack-sm">
+        <h2>Game setup</h2>
+        <div className="setup-row">
+          <span className="setup-label">Expansions</span>
+          <div className="chip-list">
+            <span className="chip chip-static">Base</span>
+            {SELECTABLE_EXPANSIONS.map((expansion) => (
+              <button
+                key={expansion.id}
+                type="button"
+                className={`chip${config.expansions.includes(expansion.id) ? ' chip-on' : ''}`}
+                disabled={readOnly}
+                onClick={() => toggleExpansion(expansion.id)}
+              >
+                {expansion.short}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="setup-row">
+          <span className="setup-label">Goal board</span>
+          <div className="segmented">
+            {(['green', 'blue'] as GoalBoard[]).map((board) => (
+              <button
+                key={board}
+                type="button"
+                className={config.goalBoard === board ? 'active' : ''}
+                disabled={readOnly}
+                onClick={() => changeConfig({ goalBoard: board })}
+              >
+                {board === 'green' ? 'Green (majority)' : 'Blue (per item)'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {config.expansions.includes('asia') && (
+          <label className="field">
+            <span>Asia mode</span>
+            <select
+              value={config.asiaVariant}
+              disabled={readOnly}
+              onChange={(event) => changeConfig({ asiaVariant: event.target.value as AsiaVariant })}
+            >
+              <option value="none">Choose a mode…</option>
+              <option value="duet">Duet — exactly 2 players</option>
+              <option value="flock">Flock — 3 or more players</option>
+            </select>
+          </label>
+        )}
+
+        {!validation.valid && <p className="alert alert-error">{validation.error}</p>}
+      </div>
+
       <ScoreSheet
-        profileId={game.scoringProfile}
+        profile={profile}
         players={game.players as EditablePlayer[]}
         onChange={(players) => update({ players })}
         onRemovePlayer={removePlayer}
-        readOnly={readOnly}
+        readOnly={readOnly || isInvited}
       />
 
       <label className="field">

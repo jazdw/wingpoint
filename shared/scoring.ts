@@ -1,21 +1,21 @@
 /**
  * Data-driven Wingspan scoring engine.
  *
- * A "profile" describes which score categories apply to a game (base game,
- * which expansions are mixed in, solo/duet/flock mode, ...). Most categories
- * are simple counters. Special kinds:
+ * A game's categories are derived from its configuration: which expansions are
+ * mixed in, which end-of-round goal board side is used (green majority or blue
+ * one-point-per-item), and — when Asia is included — whether it is Duet or
+ * Flock mode. Special category kinds:
  *
  *  - `nectar`      majority scoring per habitat (Oceania)
- *  - `roundGoals`  the four end-of-round goals, scored from each player's
- *                  placement with the official per-round point table and the
- *                  official tie-splitting rule
+ *  - `roundGoals`  the four end-of-round goals (green placements with tie
+ *                  splitting, or blue item counts capped at 5)
  *  - `signed`      may be negative (Americas hummingbird track)
  *
  * Both the Worker and the React app import this module so the live UI and the
  * stored totals always agree.
  */
 
-import type { ScoreMap } from './types';
+import type { GameConfig, GoalBoard, ScoreMap } from './types';
 
 export interface CategoryDef {
   id: string;
@@ -36,6 +36,7 @@ export interface ScoringProfile {
   description: string;
   expansions: string[];
   categories: CategoryDef[];
+  goalBoard: GoalBoard;
   /**
    * How tied nectar majorities are handled.
    * - `split` (standard Oceania): combine the tied places' points and split evenly.
@@ -49,15 +50,20 @@ export interface ExpansionDef {
   id: string;
   name: string;
   short: string;
+  /** Not selectable on its own; always in play. */
+  base?: boolean;
 }
 
 export const EXPANSIONS: ExpansionDef[] = [
-  { id: 'base', name: 'Base game', short: 'Base' },
+  { id: 'base', name: 'Base game', short: 'Base', base: true },
   { id: 'european', name: 'European Expansion', short: 'Europe' },
   { id: 'oceania', name: 'Oceania Expansion', short: 'Oceania' },
   { id: 'asia', name: 'Asia Expansion', short: 'Asia' },
   { id: 'americas', name: 'Americas Expansion', short: 'Americas' },
 ];
+
+/** Expansions the user can tick, in display order. */
+export const SELECTABLE_EXPANSIONS = EXPANSIONS.filter((expansion) => !expansion.base);
 
 /* ------------------------------------------------------------------ */
 /* End-of-round goals                                                  */
@@ -66,8 +72,8 @@ export const EXPANSIONS: ExpansionDef[] = [
 export const GOAL_ROUNDS = 4;
 
 /**
- * Official base-game end-of-round goal points by round (round 1..4) and place
- * (1st, 2nd, 3rd). Later rounds are worth more.
+ * Official green (majority) end-of-round goal points by round (round 1..4) and
+ * place (1st, 2nd, 3rd). Later rounds are worth more.
  */
 export const ROUND_GOAL_POINTS: number[][] = [
   [4, 1, 0],
@@ -82,6 +88,8 @@ export const GOAL_PLACES = [
   { value: 3, label: '3rd' },
 ];
 
+export const BLUE_GOAL_CAP = 5;
+
 export function goalRoundKey(round: number): string {
   return `goalR${round}`;
 }
@@ -90,20 +98,37 @@ export function goalRoundKey(round: number): string {
 /* Categories                                                          */
 /* ------------------------------------------------------------------ */
 
-const BASE_CATEGORIES: CategoryDef[] = [
-  { id: 'birds', label: 'Bird points', short: 'Birds', help: 'Points printed on the bird cards you played.' },
-  { id: 'bonusCards', label: 'Bonus cards', short: 'Bonus', help: 'Points from your bonus cards.' },
-  {
-    id: 'endOfRoundGoals',
-    label: 'End-of-round goals',
-    short: 'Goals',
-    kind: 'roundGoals',
-    help: 'Enter each player’s placement for every round. Ties combine the places and split the points.',
-  },
-  { id: 'eggs', label: 'Eggs', short: 'Eggs', help: 'One point per egg on your birds.' },
-  { id: 'cachedFood', label: 'Cached food', short: 'Food', help: 'One point per food token cached on your birds.' },
-  { id: 'tuckedCards', label: 'Tucked cards', short: 'Tucked', help: 'One point per tucked card.' },
-];
+const BIRDS: CategoryDef = {
+  id: 'birds',
+  label: 'Bird points',
+  short: 'Birds',
+  help: 'Points printed on the bird cards you played.',
+};
+const BONUS_CARDS: CategoryDef = {
+  id: 'bonusCards',
+  label: 'Bonus cards',
+  short: 'Bonus',
+  help: 'Points from your bonus cards.',
+};
+const EGGS: CategoryDef = { id: 'eggs', label: 'Eggs', short: 'Eggs', help: 'One point per egg on your birds.' };
+const CACHED_FOOD: CategoryDef = {
+  id: 'cachedFood',
+  label: 'Cached food',
+  short: 'Food',
+  help: 'One point per food token cached on your birds.',
+};
+const TUCKED_CARDS: CategoryDef = {
+  id: 'tuckedCards',
+  label: 'Tucked cards',
+  short: 'Tucked',
+  help: 'One point per tucked card.',
+};
+const ROUND_GOALS: CategoryDef = {
+  id: 'endOfRoundGoals',
+  label: 'End-of-round goals',
+  short: 'Goals',
+  kind: 'roundGoals',
+};
 
 const NECTAR_AWARDS = [5, 2];
 
@@ -139,81 +164,96 @@ const HUMMINGBIRD_CATEGORY: CategoryDef = {
   help: 'Net points from your hummingbird track. May be negative.',
 };
 
-export const PROFILES: ScoringProfile[] = [
-  {
-    id: 'base',
-    name: 'Base game',
-    description: 'The original Wingspan score sheet.',
-    expansions: ['base'],
-    categories: BASE_CATEGORIES,
-  },
-  {
-    id: 'european',
-    name: 'Base + European',
-    description: 'Base game with the European Expansion. Same score categories.',
-    expansions: ['base', 'european'],
-    categories: BASE_CATEGORIES,
-  },
-  {
-    id: 'oceania',
-    name: 'Base + European + Oceania',
-    description: 'Oceania adds nectar, scored by majority in each habitat.',
-    expansions: ['base', 'european', 'oceania'],
-    categories: [...BASE_CATEGORIES, NECTAR_CATEGORY],
-    nectarTies: 'split',
-  },
-  {
-    id: 'asia',
-    name: 'Base + Asia',
-    description: 'Asia Expansion in competitive (non-duet) mode.',
-    expansions: ['base', 'asia'],
-    categories: BASE_CATEGORIES,
-  },
-  {
-    id: 'asia-duet',
-    name: 'Asia (Duet)',
-    description: 'Asia Expansion duet mode. Adds duet map points.',
-    expansions: ['base', 'asia'],
-    categories: [...BASE_CATEGORIES, DUET_CATEGORY],
-    nectarTies: 'friendly',
-  },
-  {
-    id: 'asia-flock',
-    name: 'Asia (Flock)',
-    description: 'Asia Expansion flock mode (3–7 players). Same score categories as the base game.',
-    expansions: ['base', 'asia'],
-    categories: BASE_CATEGORIES,
-    nectarTies: 'friendly',
-  },
-  {
-    id: 'asia-flock-oceania',
-    name: 'Asia (Flock) + Oceania',
-    description: 'Asia flock mode mixed with Oceania. Nectar uses friendly ties.',
-    expansions: ['base', 'asia', 'oceania'],
-    categories: [...BASE_CATEGORIES, NECTAR_CATEGORY],
-    nectarTies: 'friendly',
-  },
-  {
-    id: 'americas',
-    name: 'Base + Americas',
-    description: 'Americas Expansion. Adds the hummingbird track.',
-    expansions: ['base', 'americas'],
-    categories: [...BASE_CATEGORIES, HUMMINGBIRD_CATEGORY],
-  },
-  {
-    id: 'americas-oceania',
-    name: 'Oceania + Americas',
-    description: 'Americas with Oceania nectar and hummingbird track.',
-    expansions: ['base', 'european', 'oceania', 'americas'],
-    categories: [...BASE_CATEGORIES, NECTAR_CATEGORY, HUMMINGBIRD_CATEGORY],
-    nectarTies: 'split',
-  },
-];
+/* ------------------------------------------------------------------ */
+/* Configuration                                                       */
+/* ------------------------------------------------------------------ */
 
-export const DEFAULT_PROFILE_ID = 'base';
+export function normalizeConfig(config: Partial<GameConfig> | null | undefined): GameConfig {
+  const expansions = Array.isArray(config?.expansions)
+    ? [...new Set(config!.expansions.filter((id) => SELECTABLE_EXPANSIONS.some((e) => e.id === id)))]
+    : [];
+  expansions.sort((a, b) => a.localeCompare(b));
+  return {
+    expansions,
+    goalBoard: config?.goalBoard === 'blue' ? 'blue' : 'green',
+    asiaVariant:
+      config?.asiaVariant === 'duet' || config?.asiaVariant === 'flock' ? config.asiaVariant : 'none',
+  };
+}
 
-export function getProfile(profileId: string | null | undefined): ScoringProfile {
-  return PROFILES.find((p) => p.id === profileId) ?? PROFILES[0];
+export function configProfileId(config: GameConfig): string {
+  const parts = [config.goalBoard, config.asiaVariant, ...config.expansions].filter(Boolean);
+  return parts.join('|');
+}
+
+export function configName(config: GameConfig): string {
+  const names = config.expansions.map(
+    (id) => EXPANSIONS.find((expansion) => expansion.id === id)?.name ?? id,
+  );
+  let name = names.length > 0 ? `Base + ${names.join(' + ')}` : 'Base game';
+  if (config.expansions.includes('asia')) {
+    if (config.asiaVariant === 'duet') name += ' (Duet)';
+    else if (config.asiaVariant === 'flock') name += ' (Flock)';
+  }
+  name += config.goalBoard === 'blue' ? ' · Blue goals' : ' · Green goals';
+  return name;
+}
+
+export function deriveProfile(config: GameConfig): ScoringProfile {
+  const expansions = new Set(config.expansions);
+  const categories: CategoryDef[] = [
+    BIRDS,
+    BONUS_CARDS,
+    { ...ROUND_GOALS, help: goalBoardHelp(config.goalBoard) },
+    EGGS,
+    CACHED_FOOD,
+    TUCKED_CARDS,
+  ];
+
+  if (expansions.has('oceania')) categories.push(NECTAR_CATEGORY);
+  if (expansions.has('asia') && config.asiaVariant === 'duet') categories.push(DUET_CATEGORY);
+  if (expansions.has('americas')) categories.push(HUMMINGBIRD_CATEGORY);
+
+  const nectarTies =
+    expansions.has('asia') && config.asiaVariant === 'flock' ? 'friendly' : 'split';
+
+  return {
+    id: configProfileId(config),
+    name: configName(config),
+    description: 'Derived from the selected expansions, goal board and Asia mode.',
+    expansions: ['base', ...config.expansions],
+    categories,
+    goalBoard: config.goalBoard,
+    nectarTies,
+  };
+}
+
+function goalBoardHelp(board: GoalBoard): string {
+  return board === 'green'
+    ? 'Green board: enter each player’s placement (1st/2nd/3rd). Ties combine the places and split the points.'
+    : 'Blue board: enter each player’s item count. One point per item, up to a maximum of 5 per round.';
+}
+
+export interface ConfigValidation {
+  valid: boolean;
+  error?: string;
+}
+
+export function validateConfig(config: GameConfig, playerCount: number): ConfigValidation {
+  if (config.expansions.includes('asia')) {
+    if (config.asiaVariant === 'none') {
+      return { valid: false, error: 'The Asia Expansion needs Duet or Flock mode.' };
+    }
+    if (config.asiaVariant === 'duet' && playerCount !== 2) {
+      return { valid: false, error: 'Asia Duet mode is played with exactly 2 players.' };
+    }
+    if (config.asiaVariant === 'flock' && playerCount < 3) {
+      return { valid: false, error: 'Asia Flock mode needs 3 or more players.' };
+    }
+  } else if (config.asiaVariant !== 'none') {
+    return { valid: false, error: 'Duet/Flock mode requires the Asia Expansion.' };
+  }
+  return { valid: true };
 }
 
 /* ------------------------------------------------------------------ */
@@ -249,22 +289,23 @@ function toNumber(value: number | null | undefined): number {
 /* Computation                                                         */
 /* ------------------------------------------------------------------ */
 
-/**
- * Compute per-player category points and totals.
- *
- * Nectar majority and end-of-round goal ties are cross-player calculations, so
- * this always operates on the full set of players in a game.
- */
-export function computeGame(
-  profileId: string,
-  players: { scores: ScoreMap }[],
-): {
+export interface ComputedGame {
   profile: ScoringProfile;
   perPlayer: Record<string, number>[];
   totals: number[];
   winners: number[];
-} {
-  const profile = getProfile(profileId);
+}
+
+/**
+ * Compute per-player category points and totals.
+ *
+ * Nectar majority and green end-of-round goal ties are cross-player
+ * calculations, so this always operates on the full set of players in a game.
+ */
+export function computeGame(
+  profile: ScoringProfile,
+  players: { scores: ScoreMap }[],
+): ComputedGame {
   const perPlayer: Record<string, number>[] = players.map(() => ({}));
 
   // Plain counters and signed counters.
@@ -278,7 +319,7 @@ export function computeGame(
     });
   }
 
-  // End-of-round goals: placement per round, with official tie splitting.
+  // End-of-round goals.
   const roundGoals = profile.categories.find((category) => category.kind === 'roundGoals');
   if (roundGoals) {
     players.forEach((_, index) => {
@@ -287,6 +328,14 @@ export function computeGame(
 
     for (let round = 1; round <= GOAL_ROUNDS; round += 1) {
       const key = goalRoundKey(round);
+      if (profile.goalBoard === 'blue') {
+        players.forEach((player, index) => {
+          const count = Math.max(0, Math.round(toNumber(player.scores[key])));
+          perPlayer[index][roundGoals.id] += Math.min(BLUE_GOAL_CAP, count);
+        });
+        continue;
+      }
+
       const table = ROUND_GOAL_POINTS[round - 1] ?? [];
       const placements = players.map((player) => {
         const value = Math.round(toNumber(player.scores[key]));
@@ -327,7 +376,6 @@ export function computeGame(
     for (const habitat of nectarCategory.habitats) {
       const key = nectarKey(habitat.id);
       const counts = players.map((player) => toNumber(player.scores[key]));
-      // Descending groups of equal counts (players with 0 cannot score).
       const ranked = [...new Set(counts.filter((n) => n > 0))].sort((a, b) => b - a);
       let position = 0;
 
@@ -369,8 +417,8 @@ export function computeGame(
 }
 
 /** Convenience helper for a single player's computed points. */
-export function computePlayerPoints(profileId: string, scores: ScoreMap): Record<string, number> {
-  const { perPlayer } = computeGame(profileId, [{ scores }]);
+export function computePlayerPoints(profile: ScoringProfile, scores: ScoreMap): Record<string, number> {
+  const { perPlayer } = computeGame(profile, [{ scores }]);
   return perPlayer[0] ?? {};
 }
 

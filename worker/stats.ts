@@ -1,9 +1,9 @@
 import { Hono } from 'hono';
-import { computeGame, getProfile, PROFILES } from '../shared/scoring';
+import { computeGame } from '../shared/scoring';
 import type { GameSummary, RivalStat, ScoreMap, Stats } from '../shared/types';
 import { requireAuth } from './auth';
 import type { AppEnv } from './env';
-import { type GameRow, type PlayerRow, serializeSummary, VISIBLE_GAMES_SQL } from './games';
+import { type GameRow, type PlayerRow, profileForGame, serializeSummary, VISIBLE_GAMES_SQL } from './games';
 
 interface Entry {
   total: number;
@@ -53,7 +53,7 @@ statsRoutes.get('/', async (c) => {
   const allGames = await c.env.DB.prepare(
     `${VISIBLE_GAMES_SQL} ORDER BY g.played_at DESC, g.created_at DESC`,
   )
-    .bind(user.id, user.id)
+    .bind(user.id, user.id, user.id)
     .all<GameRow>();
   const allPlayers = await c.env.DB.prepare('SELECT * FROM game_players').all<PlayerRow>();
   const playersByGame = groupPlayers(allPlayers.results);
@@ -62,18 +62,16 @@ statsRoutes.get('/', async (c) => {
 
   const entries: Entry[] = [];
   const categorySums = new Map<string, { sum: number; count: number; label: string }>();
+  const profileNames = new Map<string, string>();
   const rivals = new Map<string, RivalStat>();
   let gamesWithMe = 0;
 
-  const categoryLabel = new Map<string, string>();
-  for (const profile of PROFILES) {
-    for (const category of profile.categories) categoryLabel.set(category.id, category.label);
-  }
-
   for (const game of completed) {
     const players = playersByGame.get(game.id) ?? [];
+    const profile = profileForGame(game);
+    profileNames.set(profile.id, profile.name);
     const computed = computeGame(
-      game.scoring_profile,
+      profile,
       players.map((player) => ({ scores: parseScores(player.scores) })),
     );
     const winnerIds = new Set(computed.winners.map((index) => players[index]?.id));
@@ -93,14 +91,11 @@ statsRoutes.get('/', async (c) => {
         points,
         won: winnerIds.has(player.id) && game.mode === 'competitive',
         playerCount: players.length,
-        profileId: game.scoring_profile,
+        profileId: profile.id,
       });
       for (const [categoryId, value] of Object.entries(points)) {
-        const current = categorySums.get(categoryId) ?? {
-          sum: 0,
-          count: 0,
-          label: categoryLabel.get(categoryId) ?? categoryId,
-        };
+        const label = profile.categories.find((category) => category.id === categoryId)?.label ?? categoryId;
+        const current = categorySums.get(categoryId) ?? { sum: 0, count: 0, label };
         current.sum += value;
         current.count += 1;
         categorySums.set(categoryId, current);
@@ -158,7 +153,14 @@ statsRoutes.get('/', async (c) => {
       games: allGames.results.length,
       completed: completed.length,
       wins,
-      winRate: scope === 'me' ? (gamesWithMe ? wins / gamesWithMe : 0) : entries.length ? wins / entries.length : 0,
+      winRate:
+        scope === 'me'
+          ? gamesWithMe
+            ? wins / gamesWithMe
+            : 0
+          : entries.length
+            ? wins / entries.length
+            : 0,
       averageScore: round(average(totals)),
       bestScore: totals.length ? Math.max(...totals) : 0,
     },
@@ -175,7 +177,7 @@ statsRoutes.get('/', async (c) => {
     byProfile: [...byProfileMap.entries()]
       .map(([profile, value]) => ({
         profile,
-        name: getProfile(profile).name,
+        name: profileNames.get(profile) ?? profile,
         games: value.games,
         averageScore: round(value.total / value.games),
       }))

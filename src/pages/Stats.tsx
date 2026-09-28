@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
-import { getProfile } from '../../shared/scoring';
+import { deriveProfile, normalizeConfig } from '../../shared/scoring';
 import type { Stats } from '../../shared/types';
 import { formatDate } from '../lib/format';
 
@@ -183,7 +183,17 @@ export function StatsPage() {
                   <li key={game.id}>
                     <Link to={`/games/${game.id}`}>
                       <span>{formatDate(game.playedAt)}</span>
-                      <span className="muted">{getProfile(game.scoringProfile).name}</span>
+                      <span className="muted">
+                        {
+                          deriveProfile(
+                            normalizeConfig({
+                              expansions: game.expansions,
+                              goalBoard: game.goalBoard,
+                              asiaVariant: game.asiaVariant,
+                            }),
+                          ).name
+                        }
+                      </span>
                       <span className="muted">
                         {game.players.map((player) => `${player.name} ${player.total}`).join(' · ')}
                       </span>

@@ -3,13 +3,31 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
-import { getProfile } from '../../shared/scoring';
+import { deriveProfile, normalizeConfig } from '../../shared/scoring';
 import type { GameSummary, Group, Stats } from '../../shared/types';
 import { formatDate } from '../lib/format';
 
-function GameCard({ game, groupName }: { game: GameSummary; groupName?: string }) {
+function GameCard({
+  game,
+  groupName,
+  currentUserId,
+}: {
+  game: GameSummary;
+  groupName?: string;
+  currentUserId?: string;
+}) {
   const players = [...game.players].sort((a, b) => b.total - a.total);
   const winnerIds = new Set(game.winners);
+  const profileName = deriveProfile(
+    normalizeConfig({
+      expansions: game.expansions,
+      goalBoard: game.goalBoard,
+      asiaVariant: game.asiaVariant,
+    }),
+  ).name;
+  const isInvited = currentUserId
+    ? game.players.some((player) => player.userId === currentUserId && player.status === 'pending')
+    : false;
 
   return (
     <Link to={`/games/${game.id}`} className="game-card card">
@@ -17,9 +35,10 @@ function GameCard({ game, groupName }: { game: GameSummary; groupName?: string }
         <div>
           <div className="game-date">{formatDate(game.playedAt)}</div>
           <div className="game-meta">
-            <span className="badge">{getProfile(game.scoringProfile).name}</span>
+            <span className="badge">{profileName}</span>
             {groupName && <span className="badge">{groupName}</span>}
-            {game.status === 'in_progress' && <span className="badge badge-warn">In progress</span>}
+            {isInvited && <span className="badge badge-warn">Invitation</span>}
+            {game.status === 'in_progress' && <span className="badge">In progress</span>}
             {game.mode !== 'competitive' && <span className="badge">{game.mode}</span>}
           </div>
         </div>
@@ -33,6 +52,7 @@ function GameCard({ game, groupName }: { game: GameSummary; groupName?: string }
             <span className="pname">
               {winnerIds.has(player.id) && <span aria-hidden="true">🏆 </span>}
               {player.name}
+              {player.status === 'pending' && <span className="muted"> (invited)</span>}
             </span>
             <span className="ptotal">{player.total}</span>
           </li>
@@ -158,6 +178,7 @@ export function Dashboard() {
               key={game.id}
               game={game}
               groupName={game.groupId ? groupNames.get(game.groupId) : undefined}
+              currentUserId={user?.id}
             />
           ))}
         </div>

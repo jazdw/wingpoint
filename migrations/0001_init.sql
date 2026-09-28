@@ -53,8 +53,9 @@ CREATE TABLE IF NOT EXISTS games (
   played_at       INTEGER NOT NULL,
   mode            TEXT NOT NULL DEFAULT 'competitive',  -- competitive | solo | coop
   status          TEXT NOT NULL DEFAULT 'in_progress',  -- in_progress | completed
-  scoring_profile TEXT NOT NULL DEFAULT 'base',
-  expansions      TEXT NOT NULL DEFAULT '[]',            -- JSON array
+  expansions      TEXT NOT NULL DEFAULT '[]',            -- JSON array of expansion ids
+  goal_board      TEXT NOT NULL DEFAULT 'green',          -- green | blue
+  asia_variant    TEXT NOT NULL DEFAULT 'none',           -- none | duet | flock
   notes           TEXT,
   created_at      INTEGER NOT NULL,
   updated_at      INTEGER NOT NULL
@@ -69,6 +70,7 @@ CREATE TABLE IF NOT EXISTS game_players (
   user_id    TEXT REFERENCES users(id) ON DELETE SET NULL,
   name       TEXT NOT NULL,
   seat       INTEGER NOT NULL DEFAULT 0,
+  status     TEXT NOT NULL DEFAULT 'accepted',  -- pending (invited) | accepted
   scores     TEXT NOT NULL DEFAULT '{}',   -- raw user input keyed by score field
   points     TEXT NOT NULL DEFAULT '{}',   -- computed category points
   total      INTEGER NOT NULL DEFAULT 0,
