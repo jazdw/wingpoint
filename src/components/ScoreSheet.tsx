@@ -2,6 +2,7 @@ import { Fragment } from 'react';
 import {
   BLUE_GOAL_CAP,
   computeGame,
+  computeGoalRoundPoints,
   GOAL_PLACES,
   GOAL_ROUNDS,
   goalRoundKey,
@@ -48,6 +49,15 @@ export function ScoreSheet({
 }: ScoreSheetProps) {
   const computed = computeGame(profile, players);
   const winnerSet = new Set(computed.winners);
+  // Actual points per round (accounting for tie splitting), shown per input.
+  const roundPoints = Array.from({ length: GOAL_ROUNDS }, (_, index) => {
+    const round = index + 1;
+    const key = goalRoundKey(round);
+    return computeGoalRoundPoints(
+      players.map((player) => placementOf(player.scores[key])),
+      round,
+    );
+  });
 
   const isInvalid = (playerIndex: number, key: string) =>
     invalidFields?.has(`${playerIndex}:${key}`) ?? false;
@@ -61,48 +71,7 @@ export function ScoreSheet({
   }
 
   function setGoalPlacement(playerIndex: number, round: number, value: number) {
-    const key = goalRoundKey(round);
-    const next = players.map((player, index) =>
-      index === playerIndex ? { ...player, scores: { ...player.scores, [key]: value } } : player,
-    );
-
-    // If exactly one player is still without a place, and the assigned places
-    // form a valid ranking, fill in the next place automatically. This covers
-    // 2 players (1st fills 2nd) and also 3+ (1st + 2nd fills 3rd, ties skip).
-    const unassigned = next
-      .map((player, index) => (Number(player.scores[key] ?? 0) === 0 ? index : -1))
-      .filter((index) => index >= 0);
-    if (unassigned.length === 1) {
-      const assigned = next
-        .map((player) => Number(player.scores[key] ?? 0))
-        .filter((place) => place >= 1 && place <= 3)
-        .sort((a, b) => a - b);
-      let expected = 1;
-      let index = 0;
-      let valid = true;
-      while (index < assigned.length) {
-        const place = assigned[index];
-        let count = 0;
-        while (index < assigned.length && assigned[index] === place) {
-          count += 1;
-          index += 1;
-        }
-        if (place !== expected) {
-          valid = false;
-          break;
-        }
-        expected += count;
-      }
-      if (valid && expected <= 3) {
-        const target = unassigned[0];
-        next[target] = {
-          ...next[target],
-          scores: { ...next[target].scores, [key]: expected },
-        };
-      }
-    }
-
-    onChange(next);
+    setScore(playerIndex, goalRoundKey(round), value);
   }
 
   return (
@@ -207,17 +176,18 @@ export function ScoreSheet({
                               ariaLabel={`${player.name} round ${round} count`}
                             />
                           ) : (
-                            <select
-                              className={`placement-select${
-                                isInvalid(index, goalRoundKey(round)) ? ' field-invalid' : ''
-                              }`}
-                              aria-label={`${player.name} round ${round} placement`}
-                              value={placementOf(player.scores[goalRoundKey(round)])}
-                              disabled={readOnly}
-                              onChange={(event) =>
-                                setGoalPlacement(index, round, Number(event.target.value))
-                              }
-                            >
+                            <div className="placement-cell">
+                              <select
+                                className={`placement-select${
+                                  isInvalid(index, goalRoundKey(round)) ? ' field-invalid' : ''
+                                }`}
+                                aria-label={`${player.name} round ${round} placement`}
+                                value={placementOf(player.scores[goalRoundKey(round)])}
+                                disabled={readOnly}
+                                onChange={(event) =>
+                                  setGoalPlacement(index, round, Number(event.target.value))
+                                }
+                              >
                               <option value={0}>—</option>
                               {places.map((place) => {
                                 const points = ROUND_GOAL_POINTS[round - 1]?.[place.value - 1] ?? 0;
@@ -227,7 +197,12 @@ export function ScoreSheet({
                                   </option>
                                 );
                               })}
-                            </select>
+                              </select>
+                              <span className="placement-points">
+                                {roundPoints[round - 1][index]}{' '}
+                                {roundPoints[round - 1][index] === 1 ? 'pt' : 'pts'}
+                              </span>
+                            </div>
                           )}
                         </td>
                       ))}

@@ -1061,6 +1061,17 @@ select {
   font-weight: 650;
   text-align: center;
 }
+.placement-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+}
+.placement-points {
+  font-size: 0.7rem;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
 
 .score-table .tiebreak-row td {
   color: var(--muted);

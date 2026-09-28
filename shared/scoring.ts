@@ -400,6 +400,33 @@ function toNumber(value: number | null | undefined): number {
 /* Computation                                                         */
 /* ------------------------------------------------------------------ */
 
+/** Per-player points for one green end-of-round goal, applying tie splitting. */
+export function computeGoalRoundPoints(placements: number[], round: number): number[] {
+  const table = ROUND_GOAL_POINTS[round - 1] ?? [];
+  const points = placements.map(() => 0);
+  const groups = new Map<number, number[]>();
+  placements.forEach((place, index) => {
+    if (place >= 1 && place <= 3) {
+      const members = groups.get(place) ?? [];
+      members.push(index);
+      groups.set(place, members);
+    }
+  });
+  for (const [place, members] of groups) {
+    // Tied players occupy the tied place plus the next place(s), and share the
+    // combined points, rounded down.
+    let available = 0;
+    for (let slot = place; slot < place + members.length; slot += 1) {
+      available += table[slot - 1] ?? 0;
+    }
+    const each = Math.floor(available / members.length);
+    members.forEach((index) => {
+      points[index] = each;
+    });
+  }
+  return points;
+}
+
 export interface ComputedGame {
   profile: ScoringProfile;
   perPlayer: Record<string, number>[];
@@ -447,32 +474,14 @@ export function computeGame(
         continue;
       }
 
-      const table = ROUND_GOAL_POINTS[round - 1] ?? [];
       const placements = players.map((player) => {
         const value = Math.round(toNumber(player.scores[key]));
         return value >= 1 && value <= 3 ? value : 0;
       });
-
-      const groups = new Map<number, number[]>();
-      placements.forEach((place, index) => {
-        if (place === 0) return;
-        const members = groups.get(place) ?? [];
-        members.push(index);
-        groups.set(place, members);
+      const points = computeGoalRoundPoints(placements, round);
+      points.forEach((value, index) => {
+        perPlayer[index][roundGoals.id] += value;
       });
-
-      for (const [place, members] of groups) {
-        // Tied players occupy the tied place plus the next place(s), and share
-        // the combined points, rounded down.
-        let available = 0;
-        for (let slot = place; slot < place + members.length; slot += 1) {
-          available += table[slot - 1] ?? 0;
-        }
-        const points = Math.floor(available / members.length);
-        members.forEach((index) => {
-          perPlayer[index][roundGoals.id] += points;
-        });
-      }
     }
   }
 
