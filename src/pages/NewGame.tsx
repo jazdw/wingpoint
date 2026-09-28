@@ -130,6 +130,11 @@ export function NewGame() {
   }
 
   const users = usersQuery.data?.users ?? [];
+  // The account dropdown is your friends list; add yourself so your own player
+  // row shows your name instead of falling back to "Guest".
+  const accountOptions: PublicUser[] = user
+    ? [user, ...users.filter((candidate) => candidate.id !== user.id)]
+    : users;
 
   return (
     <div className="stack narrow">
@@ -188,7 +193,7 @@ export function NewGame() {
         </div>
 
         {players.map((player, index) => {
-          const account = users.find((candidate) => candidate.id === player.userId);
+          const account = accountOptions.find((candidate) => candidate.id === player.userId);
           return (
             <div className={`player-row${user ? '' : ' player-row-guest'}`} key={player.id}>
               {player.userId ? (
@@ -211,12 +216,12 @@ export function NewGame() {
                   value={player.userId ?? ''}
                   onChange={(event) => {
                     const userId = event.target.value || null;
-                    const selected = users.find((candidate) => candidate.id === userId);
+                    const selected = accountOptions.find((candidate) => candidate.id === userId);
                     updatePlayer(index, { userId, name: selected ? selected.name : player.name });
                   }}
                 >
                   <option value="">Guest</option>
-                  {users.map((candidate) => (
+                  {accountOptions.map((candidate) => (
                     <option
                       key={candidate.id}
                       value={candidate.id}
