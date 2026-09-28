@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { listGames } from '../lib/gameService';
@@ -65,6 +65,7 @@ function GameCard({ game, currentUserId }: { game: GameSummary; currentUserId?: 
 
 export function Dashboard() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showAllRecent, setShowAllRecent] = useState(false);
 
@@ -77,9 +78,11 @@ export function Dashboard() {
 
   const accept = useMutation({
     mutationFn: (id: string) => api(`/api/games/${id}/accept`, { method: 'POST' }),
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
       queryClient.invalidateQueries({ queryKey: ['games'] });
       queryClient.invalidateQueries({ queryKey: ['stats'] });
+      // Go straight into the game once you've accepted it.
+      navigate(`/games/${id}`);
     },
   });
   const decline = useMutation({
