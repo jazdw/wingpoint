@@ -99,6 +99,44 @@ export async function isEmailAllowed(env: Env, email: string): Promise<boolean> 
 }
 
 /* ------------------------------------------------------------------ */
+/* Users                                                               */
+/* ------------------------------------------------------------------ */
+
+interface UserProfile {
+  sub: string;
+  email: string;
+  name?: string;
+  picture?: string;
+}
+
+async function upsertUser(env: Env, profile: UserProfile): Promise<string> {
+  const now = Date.now();
+  const existing = await env.DB.prepare('SELECT * FROM users WHERE google_sub = ?')
+    .bind(profile.sub)
+    .first<UserRow>();
+  const name = profile.name ?? profile.email;
+  const picture = profile.picture ?? null;
+
+  if (existing) {
+    await env.DB.prepare(
+      'UPDATE users SET email = ?, name = ?, picture = ?, last_login_at = ? WHERE id = ?',
+    )
+      .bind(profile.email, name, picture, now, existing.id)
+      .run();
+    return existing.id;
+  }
+
+  const id = crypto.randomUUID();
+  await env.DB.prepare(
+    `INSERT INTO users (id, google_sub, email, name, picture, created_at, last_login_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  )
+    .bind(id, profile.sub, profile.email, name, picture, now, now)
+    .run();
+  return id;
+}
+
+/* ------------------------------------------------------------------ */
 /* Middleware                                                          */
 /* ------------------------------------------------------------------ */
 
@@ -203,37 +241,12 @@ authRoutes.get('/google/callback', async (c) => {
       return c.redirect('/?auth=not_allowed');
     }
 
-    const now = Date.now();
-    const existing = await c.env.DB.prepare('SELECT * FROM users WHERE google_sub = ?')
-      .bind(profile.sub)
-      .first<UserRow>();
-
-    let userId: string;
-    if (existing) {
-      userId = existing.id;
-      await c.env.DB.prepare(
-        'UPDATE users SET email = ?, name = ?, picture = ?, last_login_at = ? WHERE id = ?',
-      )
-        .bind(profile.email, profile.name ?? profile.email, profile.picture ?? null, now, userId)
-        .run();
-    } else {
-      userId = crypto.randomUUID();
-      await c.env.DB.prepare(
-        `INSERT INTO users (id, google_sub, email, name, picture, created_at, last_login_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      )
-        .bind(
-          userId,
-          profile.sub,
-          profile.email,
-          profile.name ?? profile.email,
-          profile.picture ?? null,
-          now,
-          now,
-        )
-        .run();
-    }
-
+    const userId = await upsertUser(c.env, {
+      sub: profile.sub,
+      email: profile.email,
+      name: profile.name,
+      picture: profile.picture,
+    });
     const token = await createSession(c.env, userId);
     setSessionCookie(c, token);
     return c.redirect('/');
@@ -252,4 +265,26 @@ authRoutes.post('/logout', async (c) => {
   if (token) await destroySession(c.env, token);
   deleteCookie(c, SESSION_COOKIE, { path: '/' });
   return c.json({ ok: true });
+});
+
+/**
+ * Local-development sign-in. Only works when DEV_LOGIN_EMAIL is set and the
+ * request is made to localhost, so it can never be used in production.
+ */
+authRoutes.get('/dev', async (c) => {
+  const email = c.env.DEV_LOGIN_EMAIL?.trim().toLowerCase();
+  const host = new URL(c.req.url).hostname;
+  const isLocal = host === 'localhost' || host === '127.0.0.1' || host === '::1';
+  if (!email || !isLocal) {
+    return c.json({ error: 'Dev sign-in is disabled.' }, 403);
+  }
+
+  const userId = await upsertUser(c.env, {
+    sub: `dev:${email}`,
+    email,
+    name: email.split('@')[0],
+  });
+  const token = await createSession(c.env, userId);
+  setSessionCookie(c, token);
+  return c.redirect('/');
 });

@@ -27,6 +27,14 @@ export function Login() {
         <a className="btn btn-primary btn-block" href="/api/auth/google">
           Sign in with Google
         </a>
+        {import.meta.env.DEV && (
+          <>
+            <a className="link" href="/api/auth/dev">
+              Dev sign in (localhost only)
+            </a>
+            <p className="fine-print">Requires DEV_LOGIN_EMAIL in .dev.vars.</p>
+          </>
+        )}
         <p className="fine-print">Only allow-listed Google accounts can sign in.</p>
       </div>
     </div>

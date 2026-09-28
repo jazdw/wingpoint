@@ -7,6 +7,11 @@ export interface Env {
   ALLOWED_EMAILS?: string;
   GOOGLE_CLIENT_ID?: string;
   GOOGLE_CLIENT_SECRET?: string;
+  /**
+   * LOCAL DEVELOPMENT ONLY. When set, `GET /api/auth/dev` signs in as this
+   * email without Google. Ignored on any non-localhost host.
+   */
+  DEV_LOGIN_EMAIL?: string;
 }
 
 export type AppEnv = {
