@@ -211,6 +211,14 @@ export function GameDetail() {
     return () => window.clearTimeout(timer);
   }, [saveState, draft, online, saveGame]);
 
+  // If the game was deleted while we were watching, drop it from the cached
+  // lists so it doesn't linger on the dashboard.
+  useEffect(() => {
+    if (!gameGone) return;
+    queryClient.invalidateQueries({ queryKey: ['games'] });
+    queryClient.invalidateQueries({ queryKey: ['stats'] });
+  }, [gameGone, queryClient]);
+
   const remove = useMutation({
     mutationFn: () => deleteGame(user, id),
     onSuccess: () => {
