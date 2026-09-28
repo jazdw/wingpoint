@@ -18,7 +18,39 @@
     <meta name="apple-mobile-web-app-title" content="WingPoint" />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <div
+        id="wp-boot"
+        style="min-height: 100vh; display: grid; place-items: center; padding: 1.5rem; text-align: center; font-family: system-ui, sans-serif; color: #7f7162"
+      >
+        <div>
+          <div style="font-size: 2.5rem">🪽</div>
+          <p>Loading WingPoint…</p>
+          <p id="wp-boot-msg" style="color: #a3332f; white-space: pre-wrap; max-width: 34rem"></p>
+        </div>
+      </div>
+    </div>
+    <script>
+      // If the app fails to boot, show the reason instead of a blank page.
+      (function () {
+        var message = document.getElementById('wp-boot-msg');
+        function show(text) {
+          if (message && !message.textContent) message.textContent = text;
+        }
+        window.addEventListener(
+          'error',
+          function (event) {
+            var target = event.target;
+            if (target && target.tagName === 'SCRIPT') show('Failed to load ' + (target.src || 'script'));
+            else show(event.message || 'Unknown error');
+          },
+          true,
+        );
+        window.addEventListener('unhandledrejection', function (event) {
+          show((event.reason && event.reason.message) || String(event.reason));
+        });
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

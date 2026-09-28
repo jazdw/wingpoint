@@ -1,0 +1,7 @@
+# Always revalidate the service worker and the HTML shell so a new deploy is
+# picked up immediately instead of being hidden by an old cache.
+/sw.js
+  Cache-Control: no-cache
+
+/index.html
+  Cache-Control: no-cache

@@ -1,14 +1,14 @@
 /* WingPoint offline service worker.
  *
- * Strategy:
- *  - App shell: pre-cached on install, so the UI loads with no network.
- *  - Navigations: network first, falling back to the cached shell.
- *  - Static assets: cache first, then network, caching successful responses.
- *  - API requests: never cached (game state is saved by the app and kept in
- *    localStorage while offline).
+ * Strategy (favours freshness so a new deploy can never be hidden by a stale
+ * cache):
+ *  - Navigations: network first, falling back to the cached app shell.
+ *  - Hashed build assets (/assets/...): cache first (they are immutable).
+ *  - Everything else: network first, then cache.
+ *  - API requests: never cached.
  */
 
-const VERSION = 'v2';
+const VERSION = 'v3';
 const SHELL_CACHE = `wp-shell-${VERSION}`;
 const RUNTIME_CACHE = `wp-runtime-${VERSION}`;
 
@@ -38,12 +38,31 @@ self.addEventListener('activate', (event) => {
       .keys()
       .then((keys) =>
         Promise.all(
-          keys.filter((key) => key !== SHELL_CACHE && key !== RUNTIME_CACHE).map((key) => caches.delete(key)),
+          keys.filter((key) => !key.endsWith(VERSION)).map((key) => caches.delete(key)),
         ),
       )
       .then(() => self.clients.claim()),
   );
 });
+
+async function networkFirst(request, fallbackUrl) {
+  const cache = await caches.open(RUNTIME_CACHE);
+  try {
+    const response = await fetch(request);
+    if (response && response.status === 200 && response.type === 'basic') {
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    const cached = await cache.match(request);
+    if (cached) return cached;
+    if (fallbackUrl) {
+      const fallback = await caches.match(fallbackUrl);
+      if (fallback) return fallback;
+    }
+    return Response.error();
+  }
+}
 
 self.addEventListener('fetch', (event) => {
   const { request } = event;
@@ -56,22 +75,27 @@ self.addEventListener('fetch', (event) => {
   if (url.pathname.startsWith('/api/')) return;
 
   if (request.mode === 'navigate') {
+    event.respondWith(networkFirst(request, '/index.html'));
+    return;
+  }
+
+  // Content-hashed build assets never change, so cache first.
+  if (url.pathname.startsWith('/assets/')) {
     event.respondWith(
-      fetch(request).catch(() => caches.match('/index.html').then((cached) => cached || Response.error())),
+      caches.match(request).then((cached) => {
+        if (cached) return cached;
+        return fetch(request).then((response) => {
+          if (response && response.status === 200 && response.type === 'basic') {
+            const copy = response.clone();
+            caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, copy));
+          }
+          return response;
+        });
+      }),
     );
     return;
   }
 
-  event.respondWith(
-    caches.match(request).then((cached) => {
-      if (cached) return cached;
-      return fetch(request).then((response) => {
-        if (response && response.status === 200 && response.type === 'basic') {
-          const copy = response.clone();
-          caches.open(RUNTIME_CACHE).then((cache) => cache.put(request, copy));
-        }
-        return response;
-      });
-    }),
-  );
+  // Non-hashed assets: network first so updates propagate.
+  event.respondWith(networkFirst(request));
 });
