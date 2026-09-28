@@ -180,8 +180,8 @@ export function Dashboard() {
             {invitedGames.map((game) => (
               <div key={game.id} className="card invite-banner">
                 <div>
-                  You’ve been invited to a game on {formatDate(game.playedAt)}. Accepting adds it to
-                  your games and stats.
+                  <strong>{game.ownerName ?? 'Someone'}</strong> invited you to a game on{' '}
+                  {formatDate(game.playedAt)}. Accepting adds it to your games and stats.
                 </div>
                 <div className="actions">
                   <button

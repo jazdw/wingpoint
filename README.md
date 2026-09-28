@@ -141,10 +141,12 @@ npx wrangler d1 execute wingpoint --remote \
 
 ## Stats & sharing
 
-- **Friends** are the people you’ve played at least one game with. They appear in
-  the New Game player dropdown and in the Stats **Friends** list with your
-  head-to-head record; tapping a friend opens their stats. Guests are tracked by
-  name and are never friends.
+- **Friends** are people who have **accepted** a game with you. They appear in the
+  New Game player dropdown and in the Stats **Friends** list with your head-to-head
+  record; tapping a friend opens their stats. Guests are tracked by name and are
+  never friends.
+- **Pending invites** show as the invitee's **email** (their name stays hidden
+  until they accept) and do **not** appear as a friend until then.
 - **Invite by email**: to add someone new, enter their email address in New Game.
   Only allow-listed accounts can be found — the full user list is never exposed.
 - **Personal stats** are attributed to an account when a player row is linked to

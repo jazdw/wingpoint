@@ -34,6 +34,7 @@ export interface GamePlayer {
 export interface Game {
   id: string;
   ownerId: string;
+  ownerName?: string | null;
   playedAt: number;
   status: GameStatus;
   coreSets: CoreSet[];
@@ -49,6 +50,7 @@ export interface Game {
 export interface GameSummary {
   id: string;
   ownerId: string;
+  ownerName?: string | null;
   playedAt: number;
   status: GameStatus;
   coreSets: CoreSet[];

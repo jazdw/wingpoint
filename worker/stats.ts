@@ -76,8 +76,9 @@ async function loadParticipatedGames(
   userId: string,
 ): Promise<{ games: GameRow[]; playersByGame: Map<string, PlayerRow[]> }> {
   const games = await env.DB.prepare(
-    `SELECT DISTINCT g.* FROM games g
+    `SELECT DISTINCT g.*, u.name AS owner_name FROM games g
        JOIN game_players gp ON gp.game_id = g.id
+       LEFT JOIN users u ON u.id = g.owner_id
       WHERE gp.user_id = ? AND gp.status = 'accepted' AND g.status = 'completed'
       ORDER BY g.played_at DESC, g.created_at DESC`,
   )

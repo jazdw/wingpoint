@@ -32,6 +32,7 @@ import type { AppEnv, Env } from './env';
 export interface GameRow {
   id: string;
   owner_id: string;
+  owner_name?: string | null;
   played_at: number;
   status: GameStatus;
   core_sets: string;
@@ -95,6 +96,7 @@ function serializeGame(row: GameRow, players: PlayerRow[]): Game {
   return {
     id: row.id,
     ownerId: row.owner_id,
+    ownerName: row.owner_name ?? null,
     playedAt: row.played_at,
     status: row.status,
     coreSets: config.coreSets,
@@ -119,6 +121,7 @@ export function serializeSummary(row: GameRow, players: PlayerRow[]): GameSummar
   return {
     id: row.id,
     ownerId: row.owner_id,
+    ownerName: row.owner_name ?? null,
     playedAt: row.played_at,
     status: row.status,
     coreSets: config.coreSets,
@@ -144,7 +147,11 @@ export function serializeSummary(row: GameRow, players: PlayerRow[]): GameSummar
 /* ------------------------------------------------------------------ */
 
 export async function loadGameRow(env: Env, id: string): Promise<GameRow | null> {
-  return env.DB.prepare('SELECT * FROM games WHERE id = ?').bind(id).first<GameRow>();
+  return env.DB.prepare(
+    `SELECT g.*, u.name AS owner_name FROM games g LEFT JOIN users u ON u.id = g.owner_id WHERE g.id = ?`,
+  )
+    .bind(id)
+    .first<GameRow>();
 }
 
 async function loadPlayerRows(env: Env, gameId: string): Promise<PlayerRow[]> {
@@ -168,8 +175,9 @@ export async function loadGame(env: Env, id: string): Promise<Game | null> {
 }
 
 /** Games visible to a user: ones they own or are a linked player in. */
-export const VISIBLE_GAMES_SQL = `SELECT DISTINCT g.*
+export const VISIBLE_GAMES_SQL = `SELECT DISTINCT g.*, u.name AS owner_name
    FROM games g
+   LEFT JOIN users u ON u.id = g.owner_id
    LEFT JOIN game_players gp ON gp.game_id = g.id AND gp.user_id = ?
   WHERE g.owner_id = ? OR gp.user_id IS NOT NULL`;
 

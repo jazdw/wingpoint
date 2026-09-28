@@ -12,7 +12,7 @@ import {
   normalizeConfig,
   SELECTABLE_EXPANSIONS,
 } from '../../shared/scoring';
-import type { Game, GameConfig, PublicUser } from '../../shared/types';
+import type { Game, GameConfig } from '../../shared/types';
 import { formatDateTime, fromDateInput, toDateInput } from '../lib/format';
 
 type SaveState = 'saved' | 'saving' | 'offline' | 'error';
@@ -81,12 +81,6 @@ export function GameDetail() {
       if (game && game.ownerId !== user?.id && game.status === 'in_progress') return 5000;
       return false;
     },
-  });
-
-  const usersQuery = useQuery({
-    queryKey: ['users'],
-    queryFn: () => api<{ users: PublicUser[] }>('/api/users'),
-    enabled: Boolean(user) && !isLocal,
   });
 
   const [draft, setDraft] = useState<Game | null>(null);
@@ -222,7 +216,7 @@ export function GameDetail() {
   const game = (readOnly && serverGame ? serverGame : (draft ?? serverGame))!;
   const config = gameConfig(game);
   const profile = deriveProfile(config);
-  const ownerName = usersQuery.data?.users.find((account) => account.id === game.ownerId)?.name;
+  const ownerName = game.ownerName;
 
   function update(partial: Partial<Game>) {
     if (readOnly) return;
