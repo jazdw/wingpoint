@@ -71,8 +71,15 @@ self.addEventListener('fetch', (event) => {
   const url = new URL(request.url);
   if (url.origin !== self.location.origin) return;
 
-  // Never cache the API.
-  if (url.pathname.startsWith('/api/')) return;
+  if (url.pathname.startsWith('/api/')) {
+    // Cache only read-only game data so it can be viewed offline. Mutations and
+    // auth are never cached. Caches are cleared on sign-out.
+    const isGameGet =
+      request.method === 'GET' &&
+      (url.pathname === '/api/games' || /^\/api\/games\/[^/]+$/.test(url.pathname));
+    if (isGameGet) event.respondWith(networkFirst(request));
+    return;
+  }
 
   if (request.mode === 'navigate') {
     event.respondWith(networkFirst(request, '/index.html'));

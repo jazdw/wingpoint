@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { useLocation, useSearchParams } from 'react-router-dom';
+import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
+import { useAuth } from '../auth';
 
 const MESSAGES: Record<string, string> = {
   not_allowed: 'That Google account is not on the WingPoint allow-list. Ask the owner to add your email.',
@@ -12,20 +13,16 @@ const MESSAGES: Record<string, string> = {
 };
 
 export function Login() {
+  const { user } = useAuth();
   const [params] = useSearchParams();
   const location = useLocation();
   const error = params.get('auth');
   const [devBusy, setDevBusy] = useState(false);
   const [devError, setDevError] = useState<string | null>(null);
 
-  // While signed out, remember a deep link so we can return to it after login
-  // (and clear it if the user navigates back to the dashboard).
+  // The login page itself is never a "return" destination.
   useEffect(() => {
-    if (location.pathname === '/') {
-      sessionStorage.removeItem('wp-return-path');
-    } else {
-      sessionStorage.setItem('wp-return-path', location.pathname);
-    }
+    sessionStorage.removeItem('wp-return-path');
   }, [location.pathname]);
 
   async function signInDev() {
@@ -43,6 +40,8 @@ export function Login() {
       setDevBusy(false);
     }
   }
+
+  if (user) return <Navigate to="/" replace />;
 
   return (
     <div className="login-page">

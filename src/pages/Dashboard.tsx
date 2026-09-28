@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
+import { listGames } from '../lib/gameService';
 import { deriveProfile, normalizeConfig } from '../../shared/scoring';
 import type { GameSummary, Stats } from '../../shared/types';
 import { formatDate } from '../lib/format';
@@ -65,16 +66,17 @@ export function Dashboard() {
   const [showAllRecent, setShowAllRecent] = useState(false);
 
   const gamesQuery = useQuery({
-    queryKey: ['games'],
-    queryFn: () => api<{ games: GameSummary[] }>('/api/games'),
+    queryKey: ['games', user?.id ?? 'local'],
+    queryFn: () => listGames(user),
   });
   const statsQuery = useQuery({
     queryKey: ['stats', 'me'],
     queryFn: () => api<{ stats: Stats }>('/api/stats'),
+    enabled: Boolean(user),
   });
 
   const stats = statsQuery.data?.stats;
-  const games = gamesQuery.data?.games ?? [];
+  const games = gamesQuery.data ?? [];
   const activeGames = games
     .filter((game) => game.status === 'in_progress')
     .sort((a, b) => b.updatedAt - a.updatedAt);
@@ -98,30 +100,37 @@ export function Dashboard() {
         </Link>
       </div>
 
-      <section className="stat-grid">
-        <div className="stat-card card">
-          <span className="stat-label">Games played</span>
-          <span className="stat-value">{stats?.totals.completed ?? '—'}</span>
-        </div>
-        <div className="stat-card card">
-          <span className="stat-label">Wins</span>
-          <span className="stat-value">{stats?.totals.wins ?? '—'}</span>
-        </div>
-        <div className="stat-card card">
-          <span className="stat-label">Win rate</span>
-          <span className="stat-value">
-            {stats ? `${Math.round(stats.totals.winRate * 100)}%` : '—'}
-          </span>
-        </div>
-        <div className="stat-card card">
-          <span className="stat-label">Average score</span>
-          <span className="stat-value">{stats?.totals.averageScore ?? '—'}</span>
-        </div>
-        <div className="stat-card card">
-          <span className="stat-label">Best score</span>
-          <span className="stat-value">{stats?.totals.bestScore || '—'}</span>
-        </div>
-      </section>
+      {user ? (
+        <section className="stat-grid">
+          <div className="stat-card card">
+            <span className="stat-label">Games played</span>
+            <span className="stat-value">{stats?.totals.completed ?? '—'}</span>
+          </div>
+          <div className="stat-card card">
+            <span className="stat-label">Wins</span>
+            <span className="stat-value">{stats?.totals.wins ?? '—'}</span>
+          </div>
+          <div className="stat-card card">
+            <span className="stat-label">Win rate</span>
+            <span className="stat-value">
+              {stats ? `${Math.round(stats.totals.winRate * 100)}%` : '—'}
+            </span>
+          </div>
+          <div className="stat-card card">
+            <span className="stat-label">Average score</span>
+            <span className="stat-value">{stats?.totals.averageScore ?? '—'}</span>
+          </div>
+          <div className="stat-card card">
+            <span className="stat-label">Best score</span>
+            <span className="stat-value">{stats?.totals.bestScore || '—'}</span>
+          </div>
+        </section>
+      ) : (
+        <p className="muted">
+          You’re playing as a guest. Games are saved on this device — <Link to="/login">sign in</Link> to
+          track stats across games and devices.
+        </p>
+      )}
 
       {gamesQuery.isLoading && <p className="muted">Loading games…</p>}
       {gamesQuery.isError && (

@@ -33,6 +33,7 @@ export function StatsPage() {
   const playersQuery = useQuery({
     queryKey: ['players'],
     queryFn: () => api<{ players: PlayedWith[] }>('/api/stats/players'),
+    enabled: Boolean(user),
   });
 
   const statsQuery = useQuery({
@@ -45,6 +46,7 @@ export function StatsPage() {
       const query = params.toString();
       return api<{ stats: Stats }>(`/api/stats${query ? `?${query}` : ''}`);
     },
+    enabled: Boolean(user),
   });
 
   function toggleExpansion(expansionId: string) {
@@ -58,6 +60,29 @@ export function StatsPage() {
   const stats = statsQuery.data?.stats;
   const players = playersQuery.data?.players ?? [];
   const maxCategory = Math.max(1, ...(stats?.categoryAverages.map((item) => item.average) ?? [1]));
+
+  if (!user) {
+    return (
+      <div className="stack">
+        <div className="page-head">
+          <div>
+            <h1>Statistics</h1>
+            <p className="muted">Sign in to track stats across games and devices.</p>
+          </div>
+        </div>
+        <div className="card empty-state">
+          <h2>Stats need an account</h2>
+          <p className="muted">
+            Local games are saved on this device. Sign in to keep stats across games and see how you
+            do against the people you play with.
+          </p>
+          <Link to="/login" className="btn btn-primary">
+            Sign in
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="stack">

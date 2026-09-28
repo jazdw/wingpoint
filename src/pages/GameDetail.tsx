@@ -4,6 +4,8 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth, useOnline } from '../auth';
 import { ScoreSheet, type EditablePlayer } from '../components/ScoreSheet';
+import { deleteGame, gamePayload as toPayload, getGame, persistGame } from '../lib/gameService';
+import { isLocalGameId } from '../lib/localGames';
 import {
   deriveProfile,
   emptyScores,
@@ -29,21 +31,29 @@ function gameConfig(game: Game): GameConfig {
   });
 }
 
-function toPayload(game: Game) {
-  return {
-    playedAt: game.playedAt,
-    status: game.status,
-    coreSets: game.coreSets,
-    expansions: game.expansions,
-    goalBoard: game.goalBoard,
-    notes: game.notes,
-    players: game.players.map((player) => ({
-      id: player.id,
-      name: player.name,
-      userId: player.userId,
-      scores: player.scores,
-    })),
-  };
+function readDraft(key: string): Game | null {
+  try {
+    const raw = localStorage.getItem(key);
+    return raw ? (JSON.parse(raw) as Game) : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeDraft(key: string, game: Game): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(game));
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function clearDraft(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    // ignore
+  }
 }
 
 const SAVE_LABELS: Record<SaveState, string> = {
@@ -65,14 +75,15 @@ export function GameDetail() {
   const queryClient = useQueryClient();
   const online = useOnline();
   const { user } = useAuth();
+  const isLocal = isLocalGameId(id);
   const draftKey = `wp-draft-${id}`;
 
   const gameQuery = useQuery({
     queryKey: ['game', id],
-    queryFn: () => api<{ game: Game }>(`/api/games/${id}`),
+    queryFn: () => getGame(user, id),
     enabled: Boolean(id),
     refetchInterval: (query) => {
-      const game = query.state.data?.game;
+      const game = query.state.data;
       if (game && game.ownerId !== user?.id && game.status === 'in_progress') return 5000;
       return false;
     },
@@ -81,6 +92,7 @@ export function GameDetail() {
   const usersQuery = useQuery({
     queryKey: ['users'],
     queryFn: () => api<{ users: PublicUser[] }>('/api/users'),
+    enabled: Boolean(user) && !isLocal,
   });
 
   const [draft, setDraft] = useState<Game | null>(null);
@@ -88,8 +100,8 @@ export function GameDetail() {
   const lastSaved = useRef('');
   const initialised = useRef(false);
 
-  const serverGame = gameQuery.data?.game;
-  const isOwner = Boolean(serverGame && user && serverGame.ownerId === user.id);
+  const serverGame = gameQuery.data;
+  const isOwner = isLocal || Boolean(serverGame && user && serverGame.ownerId === user.id);
   const readOnly = Boolean(serverGame) && !isOwner;
   const myPlayer = serverGame?.players.find((player) => player.userId === user?.id);
   const isInvited = myPlayer?.status === 'pending';
@@ -102,36 +114,33 @@ export function GameDetail() {
   }, [id]);
 
   useEffect(() => {
-    if (!serverGame) return;
-    if (!isOwner || !initialised.current) {
-      setDraft(serverGame);
-      lastSaved.current = JSON.stringify(toPayload(serverGame));
-      initialised.current = true;
-    }
-  }, [serverGame, isOwner]);
+    if (!serverGame || initialised.current) return;
+    // Prefer an unsaved local draft (offline edits) over the server copy.
+    const cachedDraft = readDraft(draftKey);
+    setDraft(cachedDraft ?? serverGame);
+    lastSaved.current = JSON.stringify(toPayload(serverGame));
+    if (cachedDraft) setSaveState('offline');
+    initialised.current = true;
+  }, [serverGame, draftKey]);
 
   useEffect(() => {
-    if (gameQuery.isError && !draft) {
-      const cached = localStorage.getItem(draftKey);
-      if (cached) {
-        try {
-          setDraft(JSON.parse(cached) as Game);
-          setSaveState('offline');
-        } catch {
-          // ignore corrupt draft
-        }
-      }
+    // No server copy (offline with no cached response): fall back to the local
+    // draft so an in-progress game is never lost on reload.
+    if (serverGame || draft || !gameQuery.isError) return;
+    const cachedDraft = readDraft(draftKey);
+    if (cachedDraft) {
+      setDraft(cachedDraft);
+      lastSaved.current = '';
+      setSaveState('offline');
+      initialised.current = true;
     }
-  }, [gameQuery.isError, draft, draftKey]);
+  }, [serverGame, draft, draftKey, gameQuery.isError]);
 
   const { mutate: saveGame } = useMutation({
-    mutationFn: (game: Game) =>
-      api<{ game: Game }>(`/api/games/${game.id}`, {
-        method: 'PATCH',
-        body: JSON.stringify(toPayload(game)),
-      }),
+    mutationFn: (game: Game) => persistGame(user, game),
     onSuccess: (_result, game) => {
       lastSaved.current = JSON.stringify(toPayload(game));
+      clearDraft(draftKey);
       setSaveState('saved');
       queryClient.invalidateQueries({ queryKey: ['games'] });
       queryClient.invalidateQueries({ queryKey: ['stats'] });
@@ -142,8 +151,9 @@ export function GameDetail() {
   useEffect(() => {
     if (!draft || readOnly) return;
     const payload = JSON.stringify(toPayload(draft));
-    localStorage.setItem(draftKey, payload);
     if (payload === lastSaved.current) return;
+    // Persist immediately so an offline reload keeps the current state.
+    writeDraft(draftKey, draft);
     if (!online) {
       setSaveState('offline');
       return;
@@ -154,9 +164,9 @@ export function GameDetail() {
   }, [draft, online, draftKey, readOnly, saveGame]);
 
   const remove = useMutation({
-    mutationFn: () => api(`/api/games/${id}`, { method: 'DELETE' }),
+    mutationFn: () => deleteGame(user, id),
     onSuccess: () => {
-      localStorage.removeItem(draftKey);
+      clearDraft(draftKey);
       queryClient.invalidateQueries({ queryKey: ['games'] });
       queryClient.invalidateQueries({ queryKey: ['stats'] });
       navigate('/');
@@ -197,7 +207,9 @@ export function GameDetail() {
 
   // Prefer the editable draft, but fall back to the server copy on the first
   // render after load (before the sync effect has populated the draft).
-  const game = (draft ?? serverGame)!;
+  // Read-only viewers should always see the live server copy; the owner edits
+  // the local draft (falling back to the server copy before it is populated).
+  const game = (readOnly && serverGame ? serverGame : (draft ?? serverGame))!;
   const config = gameConfig(game);
   const profile = deriveProfile(config);
   const validation = validateConfig(config, game.players.length);

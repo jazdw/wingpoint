@@ -9,8 +9,9 @@ import {
   SELECTABLE_EXPANSIONS,
   validateConfig,
 } from '../../shared/scoring';
-import type { Game, GoalBoard, PublicUser } from '../../shared/types';
+import type { GoalBoard, PublicUser } from '../../shared/types';
 import { newId } from '../lib/id';
+import { createGame } from '../lib/gameService';
 
 interface DraftPlayer {
   id: string;
@@ -26,6 +27,7 @@ export function NewGame() {
   const usersQuery = useQuery({
     queryKey: ['users'],
     queryFn: () => api<{ users: PublicUser[] }>('/api/users'),
+    enabled: Boolean(user),
   });
 
   const [expansions, setExpansions] = useState<string[]>([]);
@@ -42,12 +44,11 @@ export function NewGame() {
   const hasDuplicateUsers = selectedUserIds.size !== players.filter((p) => p.userId).length;
 
   const create = useMutation({
-    mutationFn: (body: unknown) =>
-      api<{ game: Game }>('/api/games', { method: 'POST', body: JSON.stringify(body) }),
-    onSuccess: (result) => {
+    mutationFn: (body: unknown) => createGame(user, body),
+    onSuccess: (game) => {
       queryClient.invalidateQueries({ queryKey: ['games'] });
       queryClient.invalidateQueries({ queryKey: ['stats'] });
-      navigate(`/games/${result.game.id}`);
+      navigate(`/games/${game.id}`);
     },
     onError: (mutationError: Error) => setError(mutationError.message),
   });
@@ -97,7 +98,10 @@ export function NewGame() {
       coreSets: config.coreSets,
       expansions: config.expansions,
       goalBoard: config.goalBoard,
-      players: cleanPlayers,
+      // Local (guest) games have no linked accounts.
+      players: user
+        ? cleanPlayers
+        : cleanPlayers.map((player) => ({ id: player.id, name: player.name })),
     });
   }
 
@@ -162,7 +166,7 @@ export function NewGame() {
         {players.map((player, index) => {
           const account = users.find((candidate) => candidate.id === player.userId);
           return (
-            <div className="player-row" key={player.id}>
+            <div className={`player-row${user ? '' : ' player-row-guest'}`} key={player.id}>
               {player.userId ? (
                 <span className="player-row-name player-row-account" title="Account display name">
                   {account?.name ?? player.name}
@@ -177,29 +181,31 @@ export function NewGame() {
                   onFocus={(event) => event.currentTarget.select()}
                 />
               )}
-              <select
-                aria-label={`Account for ${player.name}`}
-                value={player.userId ?? ''}
-                onChange={(event) => {
-                  const userId = event.target.value || null;
-                  const selected = users.find((candidate) => candidate.id === userId);
-                  updatePlayer(index, { userId, name: selected ? selected.name : player.name });
-                }}
-              >
-                <option value="">Guest</option>
-                {users.map((candidate) => (
-                  <option
-                    key={candidate.id}
-                    value={candidate.id}
-                    disabled={selectedUserIds.has(candidate.id) && player.userId !== candidate.id}
-                  >
-                    {candidate.name}
-                    {selectedUserIds.has(candidate.id) && player.userId !== candidate.id
-                      ? ' (already added)'
-                      : ''}
-                  </option>
-                ))}
-              </select>
+              {user && (
+                <select
+                  aria-label={`Account for ${player.name}`}
+                  value={player.userId ?? ''}
+                  onChange={(event) => {
+                    const userId = event.target.value || null;
+                    const selected = users.find((candidate) => candidate.id === userId);
+                    updatePlayer(index, { userId, name: selected ? selected.name : player.name });
+                  }}
+                >
+                  <option value="">Guest</option>
+                  {users.map((candidate) => (
+                    <option
+                      key={candidate.id}
+                      value={candidate.id}
+                      disabled={selectedUserIds.has(candidate.id) && player.userId !== candidate.id}
+                    >
+                      {candidate.name}
+                      {selectedUserIds.has(candidate.id) && player.userId !== candidate.id
+                        ? ' (already added)'
+                        : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"

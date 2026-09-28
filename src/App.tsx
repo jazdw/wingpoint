@@ -8,7 +8,7 @@ import { NewGame } from './pages/NewGame';
 import { StatsPage } from './pages/Stats';
 
 export default function App() {
-  const { user, loading } = useAuth();
+  const { loading } = useAuth();
 
   if (loading) {
     return (
@@ -19,10 +19,9 @@ export default function App() {
     );
   }
 
-  if (!user) return <Login />;
-
   return (
     <Routes>
+      <Route path="/login" element={<Login />} />
       <Route element={<Layout />}>
         <Route index element={<Dashboard />} />
         <Route path="games/new" element={<NewGame />} />

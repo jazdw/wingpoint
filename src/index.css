@@ -508,6 +508,9 @@ select {
   gap: 0.5rem;
   align-items: center;
 }
+.player-row-guest {
+  grid-template-columns: 1fr auto;
+}
 @media (max-width: 560px) {
   .player-row {
     grid-template-columns: 1fr 1fr;

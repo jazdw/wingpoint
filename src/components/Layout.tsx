@@ -21,14 +21,22 @@ export function Layout() {
           <NavLink to="/games/new" className="btn btn-primary btn-sm">
             New game
           </NavLink>
-          {user?.picture ? (
-            <img className="avatar" src={user.picture} alt="" referrerPolicy="no-referrer" />
+          {user ? (
+            <>
+              {user.picture ? (
+                <img className="avatar" src={user.picture} alt="" referrerPolicy="no-referrer" />
+              ) : (
+                <span className="avatar avatar-fallback">{user.name?.[0]?.toUpperCase() ?? '?'}</span>
+              )}
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => void logout()}>
+                Sign out
+              </button>
+            </>
           ) : (
-            <span className="avatar avatar-fallback">{user?.name?.[0]?.toUpperCase() ?? '?'}</span>
+            <NavLink to="/login" className="btn btn-sm">
+              Sign in
+            </NavLink>
           )}
-          <button type="button" className="btn btn-ghost btn-sm" onClick={() => void logout()}>
-            Sign out
-          </button>
         </div>
       </header>
       <main className="page">

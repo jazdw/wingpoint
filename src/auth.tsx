@@ -1,7 +1,18 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
-import { api } from './api';
+import { api, ApiError } from './api';
 import type { AuthUser } from '../shared/types';
+
+const USER_KEY = 'wp-user';
+
+function readCachedUser(): AuthUser | null {
+  try {
+    const raw = localStorage.getItem(USER_KEY);
+    return raw ? (JSON.parse(raw) as AuthUser) : null;
+  } catch {
+    return null;
+  }
+}
 
 interface AuthState {
   user: AuthUser | null;
@@ -16,17 +27,34 @@ const AuthContext = createContext<AuthState>({
 });
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  // Start from the cached user so an offline reload stays signed in.
+  const [user, setUser] = useState<AuthUser | null>(() => readCachedUser());
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let active = true;
     api<{ user: AuthUser }>('/api/auth/me')
       .then((result) => {
-        if (active) setUser(result.user);
+        if (!active) return;
+        setUser(result.user);
+        try {
+          localStorage.setItem(USER_KEY, JSON.stringify(result.user));
+        } catch {
+          // ignore storage errors
+        }
       })
-      .catch(() => {
-        if (active) setUser(null);
+      .catch((error) => {
+        if (!active) return;
+        // Only sign out when the server rejects the session. If we are offline
+        // the request fails without a status, so keep the cached user.
+        if (error instanceof ApiError && error.status === 401) {
+          setUser(null);
+          try {
+            localStorage.removeItem(USER_KEY);
+          } catch {
+            // ignore
+          }
+        }
       })
       .finally(() => {
         if (active) setLoading(false);
@@ -41,6 +69,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       await api('/api/auth/logout', { method: 'POST' });
     } finally {
       setUser(null);
+      try {
+        localStorage.removeItem(USER_KEY);
+      } catch {
+        // ignore
+      }
+      // Drop cached API data so it isn't visible to the next user.
+      if ('caches' in window) {
+        caches.keys().then((keys) => keys.forEach((key) => void caches.delete(key)));
+      }
     }
   }, []);
 
