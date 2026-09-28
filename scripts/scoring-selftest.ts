@@ -21,10 +21,11 @@ function check(label: string, actual: unknown, expected: unknown) {
 }
 
 const profile = (
-  expansions: string[],
+  expansions: string[] = [],
   goalBoard: 'green' | 'blue' = 'green',
-  asiaVariant: 'none' | 'duet' | 'flock' = 'none',
-) => deriveProfile(normalizeConfig({ expansions, goalBoard, asiaVariant }));
+  playMode: 'standard' | 'duet' | 'flock' = 'standard',
+  coreSets: Array<'wingspan' | 'asia'> = ['wingspan'],
+) => deriveProfile(normalizeConfig({ coreSets, expansions, goalBoard, playMode }));
 
 const forest = (counts: number[], expansions = ['oceania'], board: 'green' | 'blue' = 'green') => {
   const players = counts.map((n) => ({ scores: { nectar_forest: n } as Record<string, number | null> }));
@@ -42,7 +43,7 @@ check('nectar zeros never score', forest([0, 0, 0]), [0, 0, 0]);
 check(
   'flock nectar friendly ties',
   computeGame(
-    profile(['oceania', 'asia'], 'green', 'flock'),
+    profile(['oceania'], 'green', 'flock', ['wingspan', 'asia']),
     [3, 3, 1].map((n) => ({ scores: { nectar_forest: n } as Record<string, number | null> })),
   ).perPlayer.map((points) => points.nectar),
   [5, 5, 2],
@@ -115,25 +116,39 @@ check(
 // Config validation.
 check(
   'duet needs exactly 2 players',
-  validateConfig(normalizeConfig({ expansions: ['asia'], goalBoard: 'green', asiaVariant: 'duet' }), 3)
-    .valid,
+  validateConfig(
+    normalizeConfig({ coreSets: ['wingspan', 'asia'], goalBoard: 'green', playMode: 'duet' }),
+    3,
+  ).valid,
   false,
 );
 check(
-  'flock needs 3+ players',
-  validateConfig(normalizeConfig({ expansions: ['asia'], goalBoard: 'green', asiaVariant: 'flock' }), 2)
-    .valid,
+  'flock needs 6–7 players',
+  validateConfig(
+    normalizeConfig({ coreSets: ['wingspan', 'asia'], goalBoard: 'green', playMode: 'flock' }),
+    3,
+  ).valid,
   false,
 );
 check(
-  'asia needs a mode',
-  validateConfig(normalizeConfig({ expansions: ['asia'], goalBoard: 'green', asiaVariant: 'none' }), 4)
-    .valid,
+  'flock requires asia',
+  validateConfig(
+    normalizeConfig({ coreSets: ['wingspan'], goalBoard: 'green', playMode: 'flock' }),
+    6,
+  ).valid,
   false,
+);
+check(
+  'asia standalone with no expansions is valid',
+  validateConfig(
+    normalizeConfig({ coreSets: ['asia'], goalBoard: 'green', playMode: 'duet' }),
+    2,
+  ).valid,
+  true,
 );
 check(
   'base config is valid',
-  validateConfig(normalizeConfig({ expansions: [], goalBoard: 'blue', asiaVariant: 'none' }), 4).valid,
+  validateConfig(normalizeConfig({ coreSets: ['wingspan'], goalBoard: 'blue' }), 4).valid,
   true,
 );
 

@@ -2,19 +2,62 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
-import { deriveProfile, normalizeConfig } from '../../shared/scoring';
-import type { Stats } from '../../shared/types';
+import { useAuth } from '../auth';
+import { deriveProfile, normalizeConfig, SELECTABLE_EXPANSIONS } from '../../shared/scoring';
+import type { GameSummary, GoalBoard, Stats } from '../../shared/types';
 import { formatDate } from '../lib/format';
 
-type Scope = 'me' | 'group';
+interface PlayedWith {
+  id: string;
+  name: string;
+  picture: string | null;
+  games: number;
+}
+
+function profileLabel(game: GameSummary): string {
+  return deriveProfile(
+    normalizeConfig({
+      coreSets: game.coreSets,
+      expansions: game.expansions,
+      goalBoard: game.goalBoard,
+      playMode: game.playMode,
+    }),
+  ).name;
+}
 
 export function StatsPage() {
-  const [scope, setScope] = useState<Scope>('me');
-  const statsQuery = useQuery({
-    queryKey: ['stats', scope],
-    queryFn: () => api<{ stats: Stats }>(`/api/stats?scope=${scope}`),
+  const { user } = useAuth();
+  const [subjectId, setSubjectId] = useState<string>('me');
+  const [selectedExpansions, setSelectedExpansions] = useState<string[]>([]);
+  const [goalBoard, setGoalBoard] = useState<'all' | GoalBoard>('all');
+
+  const playersQuery = useQuery({
+    queryKey: ['players'],
+    queryFn: () => api<{ players: PlayedWith[] }>('/api/stats/players'),
   });
+
+  const statsQuery = useQuery({
+    queryKey: ['stats', subjectId, selectedExpansions, goalBoard],
+    queryFn: () => {
+      const params = new URLSearchParams();
+      if (subjectId !== 'me') params.set('userId', subjectId);
+      if (selectedExpansions.length) params.set('expansions', selectedExpansions.join(','));
+      if (goalBoard !== 'all') params.set('goalBoard', goalBoard);
+      const query = params.toString();
+      return api<{ stats: Stats }>(`/api/stats${query ? `?${query}` : ''}`);
+    },
+  });
+
+  function toggleExpansion(expansionId: string) {
+    setSelectedExpansions((prev) =>
+      prev.includes(expansionId)
+        ? prev.filter((value) => value !== expansionId)
+        : [...prev, expansionId],
+    );
+  }
+
   const stats = statsQuery.data?.stats;
+  const players = playersQuery.data?.players ?? [];
   const maxCategory = Math.max(1, ...(stats?.categoryAverages.map((item) => item.average) ?? [1]));
 
   return (
@@ -22,34 +65,86 @@ export function StatsPage() {
       <div className="page-head">
         <div>
           <h1>Statistics</h1>
-          <p className="muted">How your games are going, across all the expansions.</p>
+          <p className="muted">
+            {stats?.subject && subjectId !== 'me'
+              ? `${stats.subject.name}’s games. You can only view players you’ve played with.`
+              : 'Your games across every expansion and game size.'}
+          </p>
         </div>
-        <div className="segmented" role="tablist" aria-label="Stats scope">
-          <button
-            type="button"
-            className={scope === 'me' ? 'active' : ''}
-            onClick={() => setScope('me')}
+        <label className="field inline">
+          <span className="sr-only">Player</span>
+          <select
+            className="filter-select"
+            value={subjectId}
+            onChange={(event) => setSubjectId(event.target.value)}
           >
-            My stats
-          </button>
-          <button
-            type="button"
-            className={scope === 'group' ? 'active' : ''}
-            onClick={() => setScope('group')}
-          >
-            Group
-          </button>
+            <option value="me">Me{user?.name ? ` — ${user.name}` : ''}</option>
+            {players.map((player) => (
+              <option key={player.id} value={player.id}>
+                {player.name} ({player.games})
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
+      <div className="card stack-sm">
+        <div className="setup-row">
+          <span className="setup-label">Expansions</span>
+          <div className="chip-list">
+            <button
+              type="button"
+              className={`chip${selectedExpansions.length === 0 ? ' chip-on' : ''}`}
+              onClick={() => setSelectedExpansions([])}
+            >
+              Any
+            </button>
+            {SELECTABLE_EXPANSIONS.map((expansion) => (
+              <button
+                key={expansion.id}
+                type="button"
+                className={`chip${selectedExpansions.includes(expansion.id) ? ' chip-on' : ''}`}
+                onClick={() => toggleExpansion(expansion.id)}
+              >
+                {expansion.short}
+              </button>
+            ))}
+          </div>
         </div>
+        <div className="setup-row">
+          <span className="setup-label">Goal board</span>
+          <div className="segmented">
+            {(['all', 'green', 'blue'] as const).map((board) => (
+              <button
+                key={board}
+                type="button"
+                className={goalBoard === board ? 'active' : ''}
+                onClick={() => setGoalBoard(board)}
+              >
+                {board === 'all' ? 'All' : board === 'green' ? 'Green' : 'Blue'}
+              </button>
+            ))}
+          </div>
+        </div>
+        {selectedExpansions.length > 1 && (
+          <p className="fine-print">Showing games that include all selected expansions.</p>
+        )}
       </div>
 
       {statsQuery.isLoading && <p className="muted">Loading stats…</p>}
-      {statsQuery.isError && <p className="alert alert-error">Could not load stats.</p>}
+      {statsQuery.isError && (
+        <p className="alert alert-error">Could not load stats for that player.</p>
+      )}
+
+      {stats && stats.totals.completed === 0 && (
+        <p className="muted">No completed games match these filters.</p>
+      )}
 
       {stats && (
         <>
           <section className="stat-grid">
             <div className="stat-card card">
-              <span className="stat-label">Completed games</span>
+              <span className="stat-label">Games played</span>
               <span className="stat-value">{stats.totals.completed}</span>
             </div>
             <div className="stat-card card">
@@ -117,14 +212,14 @@ export function StatsPage() {
             </section>
 
             <section className="card">
-              <h2>By scoring profile</h2>
+              <h2>By game setup</h2>
               {stats.byProfile.length === 0 ? (
                 <p className="muted">—</p>
               ) : (
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Profile</th>
+                      <th>Setup</th>
                       <th>Games</th>
                       <th>Avg</th>
                     </tr>
@@ -143,7 +238,7 @@ export function StatsPage() {
             </section>
           </div>
 
-          {scope === 'me' && stats.rivals.length > 0 && (
+          {stats.rivals.length > 0 && (
             <section className="card">
               <h2>Head to head</h2>
               <table className="data-table">
@@ -151,9 +246,9 @@ export function StatsPage() {
                   <tr>
                     <th>Opponent</th>
                     <th>Games</th>
-                    <th>My wins</th>
+                    <th>Wins</th>
                     <th>Their wins</th>
-                    <th>My avg</th>
+                    <th>Avg</th>
                     <th>Their avg</th>
                   </tr>
                 </thead>
@@ -183,17 +278,7 @@ export function StatsPage() {
                   <li key={game.id}>
                     <Link to={`/games/${game.id}`}>
                       <span>{formatDate(game.playedAt)}</span>
-                      <span className="muted">
-                        {
-                          deriveProfile(
-                            normalizeConfig({
-                              expansions: game.expansions,
-                              goalBoard: game.goalBoard,
-                              asiaVariant: game.asiaVariant,
-                            }),
-                          ).name
-                        }
-                      </span>
+                      <span className="muted">{profileLabel(game)}</span>
                       <span className="muted">
                         {game.players.map((player) => `${player.name} ${player.total}`).join(' · ')}
                       </span>

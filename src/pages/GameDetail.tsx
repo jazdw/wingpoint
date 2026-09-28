@@ -5,6 +5,7 @@ import { api } from '../api';
 import { useAuth, useOnline } from '../auth';
 import { ScoreSheet, type EditablePlayer } from '../components/ScoreSheet';
 import {
+  CORE_SETS,
   deriveProfile,
   emptyScores,
   fieldKeys,
@@ -14,13 +15,11 @@ import {
   validateConfig,
 } from '../../shared/scoring';
 import type {
-  AsiaVariant,
+  CoreSet,
   Game,
   GameConfig,
-  GameMode,
   GameStatus,
   GoalBoard,
-  Group,
   PublicUser,
   ScoreMap,
 } from '../../shared/types';
@@ -30,20 +29,21 @@ type SaveState = 'saved' | 'saving' | 'offline' | 'error';
 
 function gameConfig(game: Game): GameConfig {
   return normalizeConfig({
+    coreSets: game.coreSets,
     expansions: game.expansions,
     goalBoard: game.goalBoard,
-    asiaVariant: game.asiaVariant,
+    playMode: game.playMode,
   });
 }
 
 function toPayload(game: Game) {
   return {
     playedAt: game.playedAt,
-    mode: game.mode,
     status: game.status,
+    coreSets: game.coreSets,
     expansions: game.expansions,
     goalBoard: game.goalBoard,
-    asiaVariant: game.asiaVariant,
+    playMode: game.playMode,
     notes: game.notes,
     players: game.players.map((player) => ({
       id: player.id,
@@ -80,10 +80,6 @@ export function GameDetail() {
     },
   });
 
-  const groupsQuery = useQuery({
-    queryKey: ['groups'],
-    queryFn: () => api<{ groups: Group[] }>('/api/groups'),
-  });
   const usersQuery = useQuery({
     queryKey: ['users'],
     queryFn: () => api<{ users: PublicUser[] }>('/api/users'),
@@ -186,10 +182,7 @@ export function GameDetail() {
     return (
       <div className="card empty-state">
         <h2>Game not found</h2>
-        <p className="muted">
-          It may have been deleted, or you don’t have access to it. Ask the score master to add you to
-          the group.
-        </p>
+        <p className="muted">It may have been deleted, or you don’t have access to it.</p>
         <Link to="/" className="btn">
           Back to games
         </Link>
@@ -202,9 +195,6 @@ export function GameDetail() {
   const profile = deriveProfile(config);
   const validation = validateConfig(config, game.players.length);
   const ownerName = usersQuery.data?.users.find((account) => account.id === game.ownerId)?.name;
-  const groupName = game.groupId
-    ? groupsQuery.data?.groups.find((group) => group.id === game.groupId)?.name
-    : undefined;
 
   function update(partial: Partial<Game>) {
     if (readOnly) return;
@@ -216,9 +206,10 @@ export function GameDetail() {
     setDraft((prev) => {
       if (!prev) return prev;
       const nextConfig = normalizeConfig({
+        coreSets: patch.coreSets ?? prev.coreSets,
         expansions: patch.expansions ?? prev.expansions,
         goalBoard: patch.goalBoard ?? prev.goalBoard,
-        asiaVariant: patch.asiaVariant ?? prev.asiaVariant,
+        playMode: patch.playMode ?? prev.playMode,
       });
       const nextProfile = deriveProfile(nextConfig);
       const keys = fieldKeys(nextProfile);
@@ -239,21 +230,27 @@ export function GameDetail() {
       });
       return {
         ...prev,
+        coreSets: nextConfig.coreSets,
         expansions: nextConfig.expansions,
         goalBoard: nextConfig.goalBoard,
-        asiaVariant: nextConfig.asiaVariant,
+        playMode: nextConfig.playMode,
         players,
       };
     });
+  }
+
+  function toggleCoreSet(setId: CoreSet) {
+    const next = config.coreSets.includes(setId)
+      ? config.coreSets.filter((value) => value !== setId)
+      : [...config.coreSets, setId];
+    changeConfig({ coreSets: next });
   }
 
   function toggleExpansion(expansionId: string) {
     const next = config.expansions.includes(expansionId)
       ? config.expansions.filter((value) => value !== expansionId)
       : [...config.expansions, expansionId];
-    const patch: Partial<GameConfig> = { expansions: next };
-    if (!next.includes('asia')) patch.asiaVariant = 'none';
-    changeConfig(patch);
+    changeConfig({ expansions: next });
   }
 
   function addPlayer() {
@@ -298,18 +295,6 @@ export function GameDetail() {
               disabled={readOnly}
               onChange={(event) => update({ playedAt: fromDateInput(event.target.value) })}
             />
-          </label>
-          <label className="field inline">
-            <span className="sr-only">Mode</span>
-            <select
-              value={game.mode}
-              disabled={readOnly}
-              onChange={(event) => update({ mode: event.target.value as GameMode })}
-            >
-              <option value="competitive">Competitive</option>
-              <option value="solo">Solo</option>
-              <option value="coop">Co-op</option>
-            </select>
           </label>
           <label className="field inline">
             <span className="sr-only">Status</span>
@@ -383,10 +368,7 @@ export function GameDetail() {
 
       <div className="game-header">
         <h1>{profile.name}</h1>
-        <p className="muted">
-          {formatDateTime(game.playedAt)}
-          {groupName ? ` · ${groupName}` : ''}
-        </p>
+        <p className="muted">{formatDateTime(game.playedAt)}</p>
         <p className="fine-print">
           Score master: {ownerName ?? (isOwner ? 'you' : 'someone else')}
           {readOnly ? ' · you can watch but not edit' : ''}
@@ -396,9 +378,25 @@ export function GameDetail() {
       <div className="card stack-sm">
         <h2>Game setup</h2>
         <div className="setup-row">
+          <span className="setup-label">Standalone sets</span>
+          <div className="chip-list">
+            {CORE_SETS.map((set) => (
+              <button
+                key={set.id}
+                type="button"
+                className={`chip${config.coreSets.includes(set.id as CoreSet) ? ' chip-on' : ''}`}
+                disabled={readOnly}
+                onClick={() => toggleCoreSet(set.id as CoreSet)}
+              >
+                {set.short}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="setup-row">
           <span className="setup-label">Expansions</span>
           <div className="chip-list">
-            <span className="chip chip-static">Base</span>
             {SELECTABLE_EXPANSIONS.map((expansion) => (
               <button
                 key={expansion.id}
@@ -429,21 +427,6 @@ export function GameDetail() {
             ))}
           </div>
         </div>
-
-        {config.expansions.includes('asia') && (
-          <label className="field">
-            <span>Asia mode</span>
-            <select
-              value={config.asiaVariant}
-              disabled={readOnly}
-              onChange={(event) => changeConfig({ asiaVariant: event.target.value as AsiaVariant })}
-            >
-              <option value="none">Choose a mode…</option>
-              <option value="duet">Duet — exactly 2 players</option>
-              <option value="flock">Flock — 3 or more players</option>
-            </select>
-          </label>
-        )}
 
         {!validation.valid && <p className="alert alert-error">{validation.error}</p>}
       </div>

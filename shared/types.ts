@@ -3,20 +3,24 @@
  * Keep this file free of any DOM / Workers specific APIs.
  */
 
-export type GameMode = 'competitive' | 'solo' | 'coop';
 export type GameStatus = 'in_progress' | 'completed';
 export type GoalBoard = 'green' | 'blue';
-export type AsiaVariant = 'none' | 'duet' | 'flock';
+/** Standalone sets. Wingspan base and/or Wingspan Asia. */
+export type CoreSet = 'wingspan' | 'asia';
+/** Wingspan Asia play modes. Duet needs 2 players, Flock needs 6–7. */
+export type PlayMode = 'standard' | 'duet' | 'flock';
 export type PlayerStatus = 'pending' | 'accepted';
 
 /** Raw scores keyed by score field id (see shared/scoring.ts). */
 export type ScoreMap = Record<string, number | null>;
 
 export interface GameConfig {
-  /** Expansion ids mixed with the base game (see EXPANSIONS). */
+  /** Standalone sets in play, at least one of `wingspan` / `asia`. */
+  coreSets: CoreSet[];
+  /** Expansion ids mixed in (European, Oceania, Americas). */
   expansions: string[];
   goalBoard: GoalBoard;
-  asiaVariant: AsiaVariant;
+  playMode: PlayMode;
 }
 
 export interface GamePlayer {
@@ -31,13 +35,12 @@ export interface GamePlayer {
 export interface Game {
   id: string;
   ownerId: string;
-  groupId: string | null;
   playedAt: number;
-  mode: GameMode;
   status: GameStatus;
+  coreSets: CoreSet[];
   expansions: string[];
   goalBoard: GoalBoard;
-  asiaVariant: AsiaVariant;
+  playMode: PlayMode;
   notes: string | null;
   players: GamePlayer[];
   createdAt: number;
@@ -48,13 +51,12 @@ export interface Game {
 export interface GameSummary {
   id: string;
   ownerId: string;
-  groupId: string | null;
   playedAt: number;
-  mode: GameMode;
   status: GameStatus;
+  coreSets: CoreSet[];
   expansions: string[];
   goalBoard: GoalBoard;
-  asiaVariant: AsiaVariant;
+  playMode: PlayMode;
   scored: boolean;
   players: {
     id: string;
@@ -73,22 +75,6 @@ export interface PublicUser {
   name: string;
   email: string;
   picture: string | null;
-}
-
-export interface GroupMember {
-  userId: string;
-  name: string;
-  email: string;
-  picture: string | null;
-  role: string;
-}
-
-export interface Group {
-  id: string;
-  name: string;
-  ownerId: string;
-  createdAt: number;
-  members: GroupMember[];
 }
 
 export interface RankingBucket {
@@ -110,7 +96,8 @@ export interface RivalStat {
 }
 
 export interface Stats {
-  scope: 'me' | 'group';
+  /** The player these stats are for. */
+  subject: { id: string; name: string; picture: string | null } | null;
   totals: {
     games: number;
     completed: number;

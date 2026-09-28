@@ -1,28 +1,26 @@
-import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import { deriveProfile, normalizeConfig } from '../../shared/scoring';
-import type { GameSummary, Group, Stats } from '../../shared/types';
+import type { GameSummary, Stats } from '../../shared/types';
 import { formatDate } from '../lib/format';
 
 function GameCard({
   game,
-  groupName,
   currentUserId,
 }: {
   game: GameSummary;
-  groupName?: string;
   currentUserId?: string;
 }) {
   const players = [...game.players].sort((a, b) => b.total - a.total);
   const winnerIds = new Set(game.winners);
   const profileName = deriveProfile(
     normalizeConfig({
+      coreSets: game.coreSets,
       expansions: game.expansions,
       goalBoard: game.goalBoard,
-      asiaVariant: game.asiaVariant,
+      playMode: game.playMode,
     }),
   ).name;
   const isInvited = currentUserId
@@ -36,10 +34,8 @@ function GameCard({
           <div className="game-date">{formatDate(game.playedAt)}</div>
           <div className="game-meta">
             <span className="badge">{profileName}</span>
-            {groupName && <span className="badge">{groupName}</span>}
             {isInvited && <span className="badge badge-warn">Invitation</span>}
             {game.status === 'in_progress' && <span className="badge">In progress</span>}
-            {game.mode !== 'competitive' && <span className="badge">{game.mode}</span>}
           </div>
         </div>
         <span className="chevron" aria-hidden="true">
@@ -64,7 +60,6 @@ function GameCard({
 
 export function Dashboard() {
   const { user } = useAuth();
-  const [groupFilter, setGroupFilter] = useState('all');
 
   const gamesQuery = useQuery({
     queryKey: ['games'],
@@ -72,22 +67,11 @@ export function Dashboard() {
   });
   const statsQuery = useQuery({
     queryKey: ['stats', 'me'],
-    queryFn: () => api<{ stats: Stats }>('/api/stats?scope=me'),
-  });
-  const groupsQuery = useQuery({
-    queryKey: ['groups'],
-    queryFn: () => api<{ groups: Group[] }>('/api/groups'),
+    queryFn: () => api<{ stats: Stats }>('/api/stats'),
   });
 
   const stats = statsQuery.data?.stats;
-  const groups = groupsQuery.data?.groups ?? [];
-  const groupNames = new Map(groups.map((group) => [group.id, group.name]));
-  const allGames = gamesQuery.data?.games ?? [];
-  const games = allGames.filter((game) => {
-    if (groupFilter === 'all') return true;
-    if (groupFilter === 'private') return !game.groupId;
-    return game.groupId === groupFilter;
-  });
+  const games = gamesQuery.data?.games ?? [];
 
   return (
     <div className="stack">
@@ -132,27 +116,9 @@ export function Dashboard() {
       <section>
         <div className="section-head">
           <h2>Recent games</h2>
-          <div className="section-head-actions">
-            {(groups.length > 0 || allGames.some((game) => !game.groupId)) && (
-              <select
-                className="filter-select"
-                aria-label="Filter games by group"
-                value={groupFilter}
-                onChange={(event) => setGroupFilter(event.target.value)}
-              >
-                <option value="all">All games</option>
-                {groups.map((group) => (
-                  <option key={group.id} value={group.id}>
-                    {group.name}
-                  </option>
-                ))}
-                <option value="private">Private only</option>
-              </select>
-            )}
-            <Link to="/stats" className="link">
-              All stats →
-            </Link>
-          </div>
+          <Link to="/stats" className="link">
+            All stats →
+          </Link>
         </div>
 
         {gamesQuery.isLoading && <p className="muted">Loading games…</p>}
@@ -174,12 +140,7 @@ export function Dashboard() {
 
         <div className="game-list">
           {games.map((game) => (
-            <GameCard
-              key={game.id}
-              game={game}
-              groupName={game.groupId ? groupNames.get(game.groupId) : undefined}
-              currentUserId={user?.id}
-            />
+            <GameCard key={game.id} game={game} currentUserId={user?.id} />
           ))}
         </div>
       </section>

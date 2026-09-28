@@ -15,9 +15,8 @@ front end, Google sign-in (allow-list only) and offline support.
   food as per the rulebook.
 - **Auto-save** — every change is saved shortly after you stop typing. While
   offline, edits are kept in `localStorage` and synced when you reconnect.
-- **Groups & live viewing** — put your regular players in a group. Members can
-  watch a game update live from their own login; only the score master (the
-  game owner) can edit.
+- **Live viewing** — linked players watch a game update live from their own
+  login; only the score master (the game owner) can edit.
 - **Stats across games** — wins, averages, category breakdowns, results by
   player count, and head-to-head records.
 - **PWA** — installable on Android and iOS, with a service-worker app shell so
@@ -106,15 +105,18 @@ npx wrangler d1 execute wingpoint --remote \
   --command "INSERT INTO allowed_emails (email, added_at, note) VALUES ('friend@example.com', $(date +%s000), 'invited');"
 ```
 
-## Groups, sharing & stats
+## Stats & sharing
 
-- **Stats** are attributed to an account when a player row is linked to that
-  account (the New Game screen lets you link players to allow-listed users). A
-  player left as a guest is tracked by name instead.
-- **Groups** (Manage → Groups) are persistent player sets. A game can be assigned
-  to a group; every member can then see the game and watch it update live, but
-  only the **score master** (the account that created the game) can edit or
-  delete it. Games not in a group are private to their owner.
+- **Personal stats** are attributed to an account when a player row is linked to
+  it (the New Game screen lets you link players to allow-listed users). A guest
+  is tracked by name instead.
+- **Other players’ stats**: on the Stats page you can pick any account you have
+  played a game with. Someone you have never shared a game with is not listed and
+  the API refuses to return their stats.
+- **Head to head**: your Stats page shows results against everyone you have
+  played with (linked accounts and named guests).
+- **Visibility**: a game can only be seen by its owner and the linked players in
+  it. There is no global/group browsing.
 - **Invitations**: linking another account to a game sends them an invitation;
   the game shows as *Invitation* on their dashboard until they accept or decline.
   Guests never need to accept.
@@ -157,24 +159,25 @@ npx wrangler d1 migrations apply wingpoint --remote
 
 ## Scoring & expansions
 
-Profiles are defined in `shared/scoring.ts`:
+A game is configured from **standalone sets (Wingspan and/or Wingspan Asia) + a
+goal board side (green/blue) + any combination of expansions**. The scoring
+categories are derived from that configuration in `shared/scoring.ts`.
 
-| Profile              | Categories                                                              |
-| -------------------- | ----------------------------------------------------------------------- |
-| `base`               | Birds, Bonus cards, End-of-round goals, Eggs, Cached food, Tucked cards |
-| `european`           | Same as base                                                            |
-| `oceania`            | Base + **Nectar** (5 pts first, 2 pts second; ties split evenly)        |
-| `asia`               | Base                                                                    |
-| `asia-duet`          | Base + **Duet map**                                                     |
-| `asia-flock`         | Base (flock mode)                                                       |
-| `asia-flock-oceania` | Base + **Nectar** with friendly ties (Asia flock + Oceania)             |
-| `americas`           | Base + **Hummingbird track** (signed points)                            |
-| `americas-oceania`   | Base + **Nectar** + **Hummingbird track**                               |
+The Asia **Duet/Flock play modes** remain implemented in the scoring engine and
+stored on each game (`play_mode`), but are intentionally not shown in the UI yet,
+so they can be surfaced again later without a schema change.
 
-A game is configured from **base game + goal board side (green/blue) + any
-combination of expansions**, plus an Asia mode when Asia is included. Invalid
-combinations (for example Asia without a mode, Duet with more than 2 players, or
-Flock with fewer than 3) are rejected with a message.
+Categories are added to every game as follows:
+
+| Category | Added when |
+| -------- | ---------- |
+| Birds, Bonus cards, End-of-round goals, Eggs, Cached food, Tucked cards | always |
+| Nectar | Oceania is in play (5 pts first, 2 pts second; ties split evenly) |
+| Hummingbird track | Americas is in play (signed points) |
+| Duet map | Wingspan Asia + Duet mode — engine only, not shown in the UI yet |
+
+Invalid configurations (for example Flock without Asia, Duet with other than 2
+players) are rejected with a message.
 
 **Green end-of-round goals** are entered per round as a placement
 (1st/2nd/3rd/none) and scored with the official table:

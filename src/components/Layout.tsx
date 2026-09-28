@@ -16,7 +16,6 @@ export function Layout() {
             Games
           </NavLink>
           <NavLink to="/stats">Stats</NavLink>
-          <NavLink to="/groups">Groups</NavLink>
         </nav>
         <div className="user-menu">
           <NavLink to="/games/new" className="btn btn-primary btn-sm">

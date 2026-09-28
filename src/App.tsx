@@ -3,7 +3,6 @@ import { useAuth } from './auth';
 import { Layout } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
 import { GameDetail } from './pages/GameDetail';
-import { GroupsPage } from './pages/Groups';
 import { Login } from './pages/Login';
 import { NewGame } from './pages/NewGame';
 import { StatsPage } from './pages/Stats';
@@ -29,7 +28,6 @@ export default function App() {
         <Route path="games/new" element={<NewGame />} />
         <Route path="games/:id" element={<GameDetail />} />
         <Route path="stats" element={<StatsPage />} />
-        <Route path="groups" element={<GroupsPage />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Route>
     </Routes>

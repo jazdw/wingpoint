@@ -4,12 +4,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
 import {
+  CORE_SETS,
   deriveProfile,
   normalizeConfig,
   SELECTABLE_EXPANSIONS,
   validateConfig,
 } from '../../shared/scoring';
-import type { AsiaVariant, Game, GameMode, GoalBoard, Group, PublicUser } from '../../shared/types';
+import type { CoreSet, Game, GoalBoard, PublicUser } from '../../shared/types';
 import { fromDateInput, toDateInput } from '../lib/format';
 
 interface DraftPlayer {
@@ -27,23 +28,17 @@ export function NewGame() {
     queryKey: ['users'],
     queryFn: () => api<{ users: PublicUser[] }>('/api/users'),
   });
-  const groupsQuery = useQuery({
-    queryKey: ['groups'],
-    queryFn: () => api<{ groups: Group[] }>('/api/groups'),
-  });
 
-  const [groupId, setGroupId] = useState('');
   const [playedAt, setPlayedAt] = useState(() => Date.now());
-  const [mode, setMode] = useState<GameMode>('competitive');
+  const [coreSets, setCoreSets] = useState<CoreSet[]>(['wingspan']);
   const [expansions, setExpansions] = useState<string[]>([]);
   const [goalBoard, setGoalBoard] = useState<GoalBoard>('green');
-  const [asiaVariant, setAsiaVariant] = useState<AsiaVariant>('none');
   const [players, setPlayers] = useState<DraftPlayer[]>([
     { id: crypto.randomUUID(), name: user?.name ?? 'Player 1', userId: user?.id ?? null },
   ]);
   const [error, setError] = useState<string | null>(null);
 
-  const config = normalizeConfig({ expansions, goalBoard, asiaVariant });
+  const config = normalizeConfig({ coreSets, expansions, goalBoard });
   const profile = deriveProfile(config);
   const validation = validateConfig(config, players.length);
   const selectedUserIds = new Set(players.map((player) => player.userId).filter(Boolean) as string[]);
@@ -60,22 +55,18 @@ export function NewGame() {
     onError: (mutationError: Error) => setError(mutationError.message),
   });
 
-  function chooseGroup(nextGroupId: string) {
-    setGroupId(nextGroupId);
-    const group = (groupsQuery.data?.groups ?? []).find((item) => item.id === nextGroupId);
-    if (group) {
-      setPlayers(
-        group.members.map((member) => ({
-          id: crypto.randomUUID(),
-          name: member.name,
-          userId: member.userId,
-        })),
-      );
-    } else {
-      setPlayers([
-        { id: crypto.randomUUID(), name: user?.name ?? 'Player 1', userId: user?.id ?? null },
-      ]);
-    }
+  function toggleCoreSet(setId: CoreSet) {
+    setCoreSets((prev) =>
+      prev.includes(setId) ? prev.filter((value) => value !== setId) : [...prev, setId],
+    );
+  }
+
+  function toggleExpansion(expansionId: string) {
+    setExpansions((prev) =>
+      prev.includes(expansionId)
+        ? prev.filter((value) => value !== expansionId)
+        : [...prev, expansionId],
+    );
   }
 
   function updatePlayer(index: number, partial: Partial<DraftPlayer>) {
@@ -91,16 +82,6 @@ export function NewGame() {
 
   function removePlayer(index: number) {
     setPlayers((prev) => prev.filter((_, i) => i !== index));
-  }
-
-  function toggleExpansion(expansionId: string) {
-    setExpansions((prev) => {
-      const next = prev.includes(expansionId)
-        ? prev.filter((value) => value !== expansionId)
-        : [...prev, expansionId];
-      if (!next.includes('asia')) setAsiaVariant('none');
-      return next;
-    });
   }
 
   function submit() {
@@ -123,11 +104,10 @@ export function NewGame() {
     }
     create.mutate({
       playedAt,
-      mode,
+      coreSets: config.coreSets,
       expansions: config.expansions,
       goalBoard: config.goalBoard,
-      asiaVariant: config.asiaVariant,
-      groupId: groupId || null,
+      playMode: config.playMode,
       players: cleanPlayers,
     });
   }
@@ -147,29 +127,34 @@ export function NewGame() {
       </div>
 
       <div className="card stack-sm">
-        <div className="field-row">
-          <label className="field">
-            <span>Date</span>
-            <input
-              type="date"
-              value={toDateInput(playedAt)}
-              onChange={(event) => setPlayedAt(fromDateInput(event.target.value))}
-            />
-          </label>
-          <label className="field">
-            <span>Mode</span>
-            <select value={mode} onChange={(event) => setMode(event.target.value as GameMode)}>
-              <option value="competitive">Competitive</option>
-              <option value="solo">Solo</option>
-              <option value="coop">Co-op</option>
-            </select>
-          </label>
+        <label className="field">
+          <span>Date</span>
+          <input
+            type="date"
+            value={toDateInput(playedAt)}
+            onChange={(event) => setPlayedAt(fromDateInput(event.target.value))}
+          />
+        </label>
+
+        <div className="setup-row">
+          <span className="setup-label">Standalone sets</span>
+          <div className="chip-list">
+            {CORE_SETS.map((set) => (
+              <button
+                key={set.id}
+                type="button"
+                className={`chip${config.coreSets.includes(set.id as CoreSet) ? ' chip-on' : ''}`}
+                onClick={() => toggleCoreSet(set.id as CoreSet)}
+              >
+                {set.short}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="setup-row">
-          <span className="setup-label">Base game + expansions</span>
+          <span className="setup-label">Expansions</span>
           <div className="chip-list">
-            <span className="chip chip-static">Base</span>
             {SELECTABLE_EXPANSIONS.map((expansion) => (
               <button
                 key={expansion.id}
@@ -199,39 +184,8 @@ export function NewGame() {
           </div>
         </div>
 
-        {config.expansions.includes('asia') && (
-          <label className="field">
-            <span>Asia mode</span>
-            <select
-              value={asiaVariant}
-              onChange={(event) => setAsiaVariant(event.target.value as AsiaVariant)}
-            >
-              <option value="none">Choose a mode…</option>
-              <option value="duet">Duet — exactly 2 players</option>
-              <option value="flock">Flock — 3 or more players</option>
-            </select>
-          </label>
-        )}
-
         {!validation.valid && <p className="alert alert-error">{validation.error}</p>}
         <p className="fine-print">{profile.name}</p>
-
-        {(groupsQuery.data?.groups.length ?? 0) > 0 && (
-          <label className="field">
-            <span>Group (optional)</span>
-            <select value={groupId} onChange={(event) => chooseGroup(event.target.value)}>
-              <option value="">Private — only me</option>
-              {(groupsQuery.data?.groups ?? []).map((group) => (
-                <option key={group.id} value={group.id}>
-                  {group.name}
-                </option>
-              ))}
-            </select>
-            <small className="muted">
-              Group members can watch this game live, but only you can edit it.
-            </small>
-          </label>
-        )}
       </div>
 
       <div className="card stack-sm">
@@ -280,8 +234,8 @@ export function NewGame() {
           </div>
         ))}
         <p className="fine-print">
-          Linking a player to an account lets WingPoint attribute personal stats. They’ll be invited to
-          accept before the game starts counting for them. Guests are tracked by name.
+          Linking a player to an account lets WingPoint attribute stats and lets them watch the game
+          live. They’ll be invited to accept. Guests are tracked by name.
         </p>
       </div>
 

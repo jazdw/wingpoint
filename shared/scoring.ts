@@ -15,7 +15,7 @@
  * stored totals always agree.
  */
 
-import type { GameConfig, GoalBoard, ScoreMap } from './types';
+import type { CoreSet, GameConfig, GoalBoard, PlayMode, ScoreMap } from './types';
 
 export interface CategoryDef {
   id: string;
@@ -46,24 +46,33 @@ export interface ScoringProfile {
   nectarTies?: 'split' | 'friendly';
 }
 
-export interface ExpansionDef {
+export interface SetDef {
   id: string;
   name: string;
   short: string;
-  /** Not selectable on its own; always in play. */
-  base?: boolean;
 }
 
-export const EXPANSIONS: ExpansionDef[] = [
-  { id: 'base', name: 'Base game', short: 'Base', base: true },
+/** Standalone sets — choose at least one. */
+export const CORE_SETS: SetDef[] = [
+  { id: 'wingspan', name: 'Wingspan (base game)', short: 'Wingspan' },
+  { id: 'asia', name: 'Wingspan Asia (standalone)', short: 'Asia' },
+];
+
+/** Expansion sets — choose zero or more. */
+export const EXPANSIONS: SetDef[] = [
   { id: 'european', name: 'European Expansion', short: 'Europe' },
   { id: 'oceania', name: 'Oceania Expansion', short: 'Oceania' },
-  { id: 'asia', name: 'Asia Expansion', short: 'Asia' },
   { id: 'americas', name: 'Americas Expansion', short: 'Americas' },
 ];
 
 /** Expansions the user can tick, in display order. */
-export const SELECTABLE_EXPANSIONS = EXPANSIONS.filter((expansion) => !expansion.base);
+export const SELECTABLE_EXPANSIONS = EXPANSIONS;
+
+export const PLAY_MODES: { id: PlayMode; name: string; short: string }[] = [
+  { id: 'standard', name: 'Standard', short: 'Standard' },
+  { id: 'duet', name: 'Duet (2 players)', short: 'Duet' },
+  { id: 'flock', name: 'Flock (6–7 players)', short: 'Flock' },
+];
 
 /* ------------------------------------------------------------------ */
 /* End-of-round goals                                                  */
@@ -169,37 +178,47 @@ const HUMMINGBIRD_CATEGORY: CategoryDef = {
 /* ------------------------------------------------------------------ */
 
 export function normalizeConfig(config: Partial<GameConfig> | null | undefined): GameConfig {
+  const coreSets = Array.isArray(config?.coreSets)
+    ? [...new Set(config!.coreSets.filter((id): id is CoreSet => id === 'wingspan' || id === 'asia'))]
+    : (['wingspan'] as CoreSet[]);
+  coreSets.sort((a, b) => a.localeCompare(b));
+
   const expansions = Array.isArray(config?.expansions)
-    ? [...new Set(config!.expansions.filter((id) => SELECTABLE_EXPANSIONS.some((e) => e.id === id)))]
+    ? [...new Set(config!.expansions.filter((id) => EXPANSIONS.some((e) => e.id === id)))]
     : [];
   expansions.sort((a, b) => a.localeCompare(b));
+
+  const playMode: PlayMode =
+    config?.playMode === 'duet' || config?.playMode === 'flock' ? config.playMode : 'standard';
+
   return {
+    coreSets,
     expansions,
     goalBoard: config?.goalBoard === 'blue' ? 'blue' : 'green',
-    asiaVariant:
-      config?.asiaVariant === 'duet' || config?.asiaVariant === 'flock' ? config.asiaVariant : 'none',
+    playMode,
   };
 }
 
 export function configProfileId(config: GameConfig): string {
-  const parts = [config.goalBoard, config.asiaVariant, ...config.expansions].filter(Boolean);
-  return parts.join('|');
+  return [config.goalBoard, config.playMode, ...config.coreSets, ...config.expansions].join('|');
 }
 
 export function configName(config: GameConfig): string {
-  const names = config.expansions.map(
-    (id) => EXPANSIONS.find((expansion) => expansion.id === id)?.name ?? id,
+  const core = config.coreSets.map(
+    (id) => CORE_SETS.find((set) => set.id === id)?.short ?? id,
   );
-  let name = names.length > 0 ? `Base + ${names.join(' + ')}` : 'Base game';
-  if (config.expansions.includes('asia')) {
-    if (config.asiaVariant === 'duet') name += ' (Duet)';
-    else if (config.asiaVariant === 'flock') name += ' (Flock)';
-  }
+  const expansions = config.expansions.map(
+    (id) => EXPANSIONS.find((set) => set.id === id)?.short ?? id,
+  );
+  let name = [...core, ...expansions].join(' + ');
+  if (config.playMode === 'duet') name += ' (Duet)';
+  else if (config.playMode === 'flock') name += ' (Flock)';
   name += config.goalBoard === 'blue' ? ' · Blue goals' : ' · Green goals';
   return name;
 }
 
 export function deriveProfile(config: GameConfig): ScoringProfile {
+  const hasAsia = config.coreSets.includes('asia');
   const expansions = new Set(config.expansions);
   const categories: CategoryDef[] = [
     BIRDS,
@@ -211,17 +230,16 @@ export function deriveProfile(config: GameConfig): ScoringProfile {
   ];
 
   if (expansions.has('oceania')) categories.push(NECTAR_CATEGORY);
-  if (expansions.has('asia') && config.asiaVariant === 'duet') categories.push(DUET_CATEGORY);
+  if (hasAsia && config.playMode === 'duet') categories.push(DUET_CATEGORY);
   if (expansions.has('americas')) categories.push(HUMMINGBIRD_CATEGORY);
 
-  const nectarTies =
-    expansions.has('asia') && config.asiaVariant === 'flock' ? 'friendly' : 'split';
+  const nectarTies = hasAsia && config.playMode === 'flock' ? 'friendly' : 'split';
 
   return {
     id: configProfileId(config),
     name: configName(config),
-    description: 'Derived from the selected expansions, goal board and Asia mode.',
-    expansions: ['base', ...config.expansions],
+    description: 'Derived from the selected sets, goal board and play mode.',
+    expansions: [...config.coreSets, ...config.expansions],
     categories,
     goalBoard: config.goalBoard,
     nectarTies,
@@ -240,18 +258,21 @@ export interface ConfigValidation {
 }
 
 export function validateConfig(config: GameConfig, playerCount: number): ConfigValidation {
-  if (config.expansions.includes('asia')) {
-    if (config.asiaVariant === 'none') {
-      return { valid: false, error: 'The Asia Expansion needs Duet or Flock mode.' };
-    }
-    if (config.asiaVariant === 'duet' && playerCount !== 2) {
+  const hasAsia = config.coreSets.includes('asia');
+  if (config.coreSets.length === 0) {
+    return { valid: false, error: 'Choose at least one standalone set.' };
+  }
+  if (config.playMode === 'duet') {
+    if (!hasAsia) return { valid: false, error: 'Duet mode requires Wingspan Asia.' };
+    if (playerCount !== 2) {
       return { valid: false, error: 'Asia Duet mode is played with exactly 2 players.' };
     }
-    if (config.asiaVariant === 'flock' && playerCount < 3) {
-      return { valid: false, error: 'Asia Flock mode needs 3 or more players.' };
+  }
+  if (config.playMode === 'flock') {
+    if (!hasAsia) return { valid: false, error: 'Flock mode requires Wingspan Asia.' };
+    if (playerCount < 6 || playerCount > 7) {
+      return { valid: false, error: 'Asia Flock mode needs 6 or 7 players.' };
     }
-  } else if (config.asiaVariant !== 'none') {
-    return { valid: false, error: 'Duet/Flock mode requires the Asia Expansion.' };
   }
   return { valid: true };
 }

@@ -26,43 +26,23 @@ CREATE TABLE IF NOT EXISTS allowed_emails (
   note     TEXT
 );
 
--- Groups let a set of allow-listed users share games. Games optionally belong
--- to a group; members can view (and watch live), only the score master (the
--- game owner) can edit.
-CREATE TABLE IF NOT EXISTS groups (
-  id         TEXT PRIMARY KEY,
-  name       TEXT NOT NULL,
-  owner_id   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  created_at INTEGER NOT NULL
-);
-CREATE INDEX IF NOT EXISTS idx_groups_owner ON groups(owner_id);
-
-CREATE TABLE IF NOT EXISTS group_members (
-  group_id  TEXT NOT NULL REFERENCES groups(id) ON DELETE CASCADE,
-  user_id   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  role      TEXT NOT NULL DEFAULT 'member',
-  joined_at INTEGER NOT NULL,
-  PRIMARY KEY (group_id, user_id)
-);
-CREATE INDEX IF NOT EXISTS idx_group_members_user ON group_members(user_id);
-
+-- Only the score master (owner) and linked players can see a game; guests
+-- can't log in, so they are tracked by name only.
 CREATE TABLE IF NOT EXISTS games (
   id              TEXT PRIMARY KEY,
   owner_id        TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  group_id        TEXT REFERENCES groups(id) ON DELETE SET NULL,
   played_at       INTEGER NOT NULL,
-  mode            TEXT NOT NULL DEFAULT 'competitive',  -- competitive | solo | coop
   status          TEXT NOT NULL DEFAULT 'in_progress',  -- in_progress | completed
+  core_sets       TEXT NOT NULL DEFAULT '["wingspan"]',  -- JSON array of standalone sets
   expansions      TEXT NOT NULL DEFAULT '[]',            -- JSON array of expansion ids
   goal_board      TEXT NOT NULL DEFAULT 'green',          -- green | blue
-  asia_variant    TEXT NOT NULL DEFAULT 'none',           -- none | duet | flock
+  play_mode       TEXT NOT NULL DEFAULT 'standard',       -- standard | duet | flock
   notes           TEXT,
   created_at      INTEGER NOT NULL,
   updated_at      INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_games_played_at ON games(played_at DESC);
 CREATE INDEX IF NOT EXISTS idx_games_status ON games(status);
-CREATE INDEX IF NOT EXISTS idx_games_group ON games(group_id);
 
 CREATE TABLE IF NOT EXISTS game_players (
   id         TEXT PRIMARY KEY,
