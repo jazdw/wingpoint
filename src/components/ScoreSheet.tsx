@@ -112,8 +112,10 @@ export function ScoreSheet({
               return (
                 <Fragment key={category.id}>
                   <tr className="group-row">
-                    <td colSpan={players.length + 1}>
+                    <td className="group-cell">
                       <span className="group-title">{category.label}</span>
+                    </td>
+                    <td className="group-fill" colSpan={players.length}>
                       <span className="muted">most in each habitat: 5 pts · second: 2 pts</span>
                     </td>
                   </tr>
@@ -151,8 +153,10 @@ export function ScoreSheet({
               return (
                 <Fragment key={category.id}>
                   <tr className="group-row">
-                    <td colSpan={players.length + 1}>
+                    <td className="group-cell">
                       <span className="group-title">{category.label}</span>
+                    </td>
+                    <td className="group-fill" colSpan={players.length}>
                       <span className="muted">
                         {blue
                           ? `blue board · 1 pt per item, max ${BLUE_GOAL_CAP} per round`

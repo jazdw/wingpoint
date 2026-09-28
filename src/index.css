@@ -914,6 +914,13 @@ select {
   font-weight: 700;
   border-top: 2px solid var(--border);
 }
+/* Keep the group label visible while the table scrolls sideways. */
+.score-table .group-row .group-cell {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  white-space: nowrap;
+}
 .score-table .group-title {
   font-family: var(--font-display);
   font-size: 1.05rem;
