@@ -3,7 +3,7 @@
  * Keep this file free of any DOM / Workers specific APIs.
  */
 
-export type GameStatus = 'in_progress' | 'completed';
+export type GameStatus = 'in_progress' | 'completed' | 'cancelled';
 export type GoalBoard = 'green' | 'blue';
 /** Standalone sets. Wingspan base and/or Wingspan Asia. */
 export type CoreSet = 'wingspan' | 'asia';

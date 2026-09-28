@@ -15,6 +15,9 @@ front end, Google sign-in (allow-list only) and offline support.
   food as per the rulebook.
 - **Auto-save** — every change is saved shortly after you stop typing. While
   offline, edits are kept in `localStorage` and synced when you reconnect.
+- **Complete or cancel** — mark a game **completed** to count it in stats, or
+  **cancel** it to abandon it without deleting. Cancelled games stay in your list
+  (marked Cancelled), are excluded from stats, and free up your in-progress slot.
 - **Live viewing** — linked players watch a game update live from their own
   login; only the score master (the game owner) can edit.
 - **Stats across games** — wins, averages, category breakdowns, results by

@@ -214,7 +214,7 @@ export async function hasInProgressConflict(
 /* Validation & writes                                                 */
 /* ------------------------------------------------------------------ */
 
-const STATUSES: GameStatus[] = ['in_progress', 'completed'];
+const STATUSES: GameStatus[] = ['in_progress', 'completed', 'cancelled'];
 
 interface PlayerInput {
   id?: string;

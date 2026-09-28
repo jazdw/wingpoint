@@ -34,7 +34,9 @@ function GameCard({
           <div className="game-meta">
             <span className="badge">{profileName}</span>
             {isInvited && <span className="badge badge-warn">Invitation</span>}
-            {game.status === 'in_progress' && <span className="badge">In progress</span>}
+            {game.status === 'in_progress' && <span className="badge badge-warn">In progress</span>}
+            {game.status === 'completed' && <span className="badge">Completed</span>}
+            {game.status === 'cancelled' && <span className="badge">Cancelled</span>}
           </div>
         </div>
         <span className="chevron" aria-hidden="true">

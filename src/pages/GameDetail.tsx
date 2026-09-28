@@ -13,14 +13,7 @@ import {
   TIEBREAK_KEY,
   validateConfig,
 } from '../../shared/scoring';
-import type {
-  Game,
-  GameConfig,
-  GameStatus,
-  GoalBoard,
-  PublicUser,
-  ScoreMap,
-} from '../../shared/types';
+import type { Game, GameConfig, GoalBoard, PublicUser, ScoreMap } from '../../shared/types';
 import { formatDateTime, fromDateInput, toDateInput } from '../lib/format';
 
 type SaveState = 'saved' | 'saving' | 'offline' | 'error';
@@ -55,6 +48,12 @@ const SAVE_LABELS: Record<SaveState, string> = {
   saving: 'Saving…',
   offline: 'Offline — changes kept on this device',
   error: 'Could not save — will retry',
+};
+
+const STATUS_LABELS: Record<Game['status'], string> = {
+  in_progress: 'In progress',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
 };
 
 export function GameDetail() {
@@ -285,17 +284,6 @@ export function GameDetail() {
               onChange={(event) => update({ playedAt: fromDateInput(event.target.value) })}
             />
           </label>
-          <label className="field inline">
-            <span className="sr-only">Status</span>
-            <select
-              value={game.status}
-              disabled={readOnly}
-              onChange={(event) => update({ status: event.target.value as GameStatus })}
-            >
-              <option value="in_progress">In progress</option>
-              <option value="completed">Completed</option>
-            </select>
-          </label>
         </div>
         <div className="game-toolbar-right">
           {readOnly ? (
@@ -307,6 +295,32 @@ export function GameDetail() {
           )}
           {!readOnly && (
             <>
+              {game.status === 'in_progress' ? (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => update({ status: 'completed' })}
+                  >
+                    Complete game
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => update({ status: 'cancelled' })}
+                  >
+                    Cancel game
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={() => update({ status: 'in_progress' })}
+                >
+                  Reopen
+                </button>
+              )}
               <button
                 type="button"
                 className="btn btn-sm"
@@ -357,7 +371,12 @@ export function GameDetail() {
 
       <div className="game-header">
         <h1>{profile.name}</h1>
-        <p className="muted">{formatDateTime(game.playedAt)}</p>
+        <p className="muted">
+          <span className={`badge${game.status === 'in_progress' ? ' badge-warn' : ''}`}>
+            {STATUS_LABELS[game.status]}
+          </span>{' '}
+          {formatDateTime(game.playedAt)}
+        </p>
         <p className="fine-print">
           Score master: {ownerName ?? (isOwner ? 'you' : 'someone else')}
           {readOnly ? ' · you can watch but not edit' : ''}
