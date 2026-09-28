@@ -212,7 +212,7 @@ export function NewGame() {
               )}
               {user && (
                 <select
-                  aria-label={`Account for ${player.name}`}
+                  aria-label={`Player ${index + 1} type`}
                   value={player.userId ?? ''}
                   onChange={(event) => {
                     const userId = event.target.value || null;
@@ -220,19 +220,35 @@ export function NewGame() {
                     updatePlayer(index, { userId, name: selected ? selected.name : player.name });
                   }}
                 >
-                  <option value="">Guest</option>
-                  {accountOptions.map((candidate) => (
-                    <option
-                      key={candidate.id}
-                      value={candidate.id}
-                      disabled={selectedUserIds.has(candidate.id) && player.userId !== candidate.id}
-                    >
-                      {candidate.name}
-                      {selectedUserIds.has(candidate.id) && player.userId !== candidate.id
-                        ? ' (already added)'
-                        : ''}
-                    </option>
-                  ))}
+                  {user && (
+                    <optgroup label="You">
+                      <option
+                        value={user.id}
+                        disabled={selectedUserIds.has(user.id) && player.userId !== user.id}
+                      >
+                        {user.name} (you)
+                      </option>
+                    </optgroup>
+                  )}
+                  {users.length > 0 && (
+                    <optgroup label="Friends">
+                      {users.map((friend) => (
+                        <option
+                          key={friend.id}
+                          value={friend.id}
+                          disabled={selectedUserIds.has(friend.id) && player.userId !== friend.id}
+                        >
+                          {friend.name}
+                          {selectedUserIds.has(friend.id) && player.userId !== friend.id
+                            ? ' (already added)'
+                            : ''}
+                        </option>
+                      ))}
+                    </optgroup>
+                  )}
+                  <optgroup label="Guest">
+                    <option value="">Guest (enter a name)</option>
+                  </optgroup>
                 </select>
               )}
               <button
