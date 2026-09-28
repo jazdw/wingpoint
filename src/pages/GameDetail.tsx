@@ -295,32 +295,6 @@ export function GameDetail() {
           )}
           {!readOnly && (
             <>
-              {game.status === 'in_progress' ? (
-                <>
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-sm"
-                    onClick={() => update({ status: 'completed' })}
-                  >
-                    Complete game
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => update({ status: 'cancelled' })}
-                  >
-                    Cancel game
-                  </button>
-                </>
-              ) : (
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  onClick={() => update({ status: 'in_progress' })}
-                >
-                  Reopen
-                </button>
-              )}
               <button
                 type="button"
                 className="btn btn-sm"
@@ -422,13 +396,45 @@ export function GameDetail() {
         {!validation.valid && <p className="alert alert-error">{validation.error}</p>}
       </div>
 
-      <ScoreSheet
-        profile={profile}
-        players={game.players as EditablePlayer[]}
-        onChange={(players) => update({ players })}
-        onRemovePlayer={removePlayer}
-        readOnly={readOnly || isInvited}
-      />
+      <div className={`score-block${readOnly ? '' : ' has-actions'}`}>
+        <ScoreSheet
+          profile={profile}
+          players={game.players as EditablePlayer[]}
+          onChange={(players) => update({ players })}
+          onRemovePlayer={removePlayer}
+          readOnly={readOnly || isInvited}
+        />
+        {!readOnly && (
+          <div className="score-actions">
+            {game.status === 'in_progress' ? (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => update({ status: 'completed' })}
+                >
+                  Complete game
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  onClick={() => update({ status: 'cancelled' })}
+                >
+                  Cancel game
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => update({ status: 'in_progress' })}
+              >
+                Reopen game
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
       <label className="field">
         <span>Notes</span>

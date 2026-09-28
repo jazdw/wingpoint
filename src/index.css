@@ -806,10 +806,34 @@ select {
 
 .score-table-wrap {
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
   border: 2px solid var(--border);
   border-radius: var(--radius);
   background: var(--surface);
   box-shadow: var(--shadow);
+}
+
+.score-block {
+  display: flex;
+  flex-direction: column;
+}
+.score-block.has-actions .score-table-wrap {
+  border-bottom: none;
+  border-bottom-left-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.score-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.85rem;
+  border: 2px solid var(--border);
+  border-radius: 0 0 var(--radius) var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+.score-actions .btn {
+  flex: 1 1 auto;
 }
 
 .score-table {
@@ -1163,4 +1187,113 @@ select {
   padding: 3rem 0;
   text-align: center;
   color: var(--muted);
+}
+
+/* ============================================================
+   Responsive
+   ============================================================ */
+
+@media (max-width: 640px) {
+  .app-shell {
+    padding-left: max(0.75rem, env(safe-area-inset-left));
+    padding-right: max(0.75rem, env(safe-area-inset-right));
+    padding-bottom: calc(2rem + env(safe-area-inset-bottom));
+  }
+
+  .site-header {
+    gap: 0.5rem;
+    padding: 0.55rem 0;
+  }
+  .brand {
+    font-size: 1.15rem;
+  }
+  .nav {
+    order: 3;
+    width: 100%;
+    margin-right: 0;
+    justify-content: flex-start;
+    border-top: 1px solid var(--border);
+    padding-top: 0.4rem;
+  }
+  .nav a {
+    padding: 0.35rem 0.6rem;
+  }
+  .user-menu {
+    margin-left: auto;
+    gap: 0.35rem;
+  }
+
+  h1 {
+    font-size: 1.7rem;
+  }
+  .card {
+    padding: 0.9rem;
+  }
+  .stat-value {
+    font-size: 1.55rem;
+  }
+
+  .setup-row {
+    gap: 0.4rem;
+  }
+  .setup-label {
+    min-width: 100%;
+    padding-top: 0;
+  }
+
+  .game-toolbar {
+    align-items: stretch;
+  }
+  .game-toolbar-fields {
+    width: 100%;
+  }
+  .game-toolbar-fields .field.inline {
+    flex: 1 1 8rem;
+  }
+  .game-toolbar-fields input,
+  .game-toolbar-fields select {
+    width: 100%;
+  }
+  .game-toolbar-right {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .score-table th,
+  .score-table td {
+    padding: 0.45rem 0.4rem;
+  }
+  .score-input input {
+    width: 2.7rem;
+  }
+  .score-input .step {
+    width: 2.1rem;
+  }
+  .placement-select {
+    min-width: 3.4rem;
+  }
+  .bars li {
+    grid-template-columns: 5rem 1fr 2.2rem;
+  }
+}
+
+@media (max-width: 440px) {
+  .stat-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .stat-value {
+    font-size: 1.4rem;
+  }
+  .score-input .step {
+    width: 1.9rem;
+  }
+  .score-input input {
+    width: 2.4rem;
+  }
+  .score-actions {
+    flex-direction: column;
+  }
+  .score-actions .btn {
+    width: 100%;
+  }
 }
