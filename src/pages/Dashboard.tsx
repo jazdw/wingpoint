@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
 import { useAuth } from '../auth';
@@ -63,11 +63,26 @@ function GameCard({ game, currentUserId }: { game: GameSummary; currentUserId?: 
 
 export function Dashboard() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [showAllRecent, setShowAllRecent] = useState(false);
 
   const gamesQuery = useQuery({
     queryKey: ['games', user?.id ?? 'local'],
     queryFn: () => listGames(user),
+    // Poll so a new invitation shows up without a manual refresh.
+    refetchInterval: user ? 15000 : false,
+  });
+
+  const accept = useMutation({
+    mutationFn: (id: string) => api(`/api/games/${id}/accept`, { method: 'POST' }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['games'] });
+      queryClient.invalidateQueries({ queryKey: ['stats'] });
+    },
+  });
+  const decline = useMutation({
+    mutationFn: (id: string) => api(`/api/games/${id}/decline`, { method: 'POST' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['games'] }),
   });
   const statsQuery = useQuery({
     queryKey: ['stats', 'me'],
@@ -77,6 +92,9 @@ export function Dashboard() {
 
   const stats = statsQuery.data?.stats;
   const games = gamesQuery.data ?? [];
+  const invitedGames = games.filter((game) =>
+    game.players.some((player) => player.userId === user?.id && player.status === 'pending'),
+  );
   const activeGames = games
     .filter((game) => game.status === 'in_progress')
     .sort((a, b) => b.updatedAt - a.updatedAt);
@@ -148,6 +166,43 @@ export function Dashboard() {
             New game
           </Link>
         </div>
+      )}
+
+      {invitedGames.length > 0 && (
+        <section>
+          <div className="section-head">
+            <h2>Invitations</h2>
+            <span className="muted">{invitedGames.length}</span>
+          </div>
+          <div className="stack-sm">
+            {invitedGames.map((game) => (
+              <div key={game.id} className="card invite-banner">
+                <div>
+                  You’ve been invited to a game on {formatDate(game.playedAt)}. Accepting adds it to
+                  your games and stats.
+                </div>
+                <div className="actions">
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={accept.isPending}
+                    onClick={() => accept.mutate(game.id)}
+                  >
+                    Accept
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    disabled={decline.isPending}
+                    onClick={() => decline.mutate(game.id)}
+                  >
+                    Decline
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       {activeGames.length > 0 && (

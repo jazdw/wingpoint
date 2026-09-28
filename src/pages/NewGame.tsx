@@ -290,8 +290,8 @@ export function NewGame() {
         {inviteError && <p className="alert alert-error">{inviteError}</p>}
         <p className="fine-print">
           A game needs at least 2 players. Invite a WingPoint account by email; people you’ve
-          already played with appear in the dropdown. Linked players use their display name and
-          must accept before the game counts for them. Guests are tracked by name.
+          already played with appear in the dropdown. Invitations are sent when you start the
+          game — linked players must accept before it counts for them. Guests are tracked by name.
         </p>
       </div>
 
