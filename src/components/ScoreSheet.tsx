@@ -62,21 +62,47 @@ export function ScoreSheet({
 
   function setGoalPlacement(playerIndex: number, round: number, value: number) {
     const key = goalRoundKey(round);
-    onChange(
-      players.map((player, index) => {
-        if (index === playerIndex) {
-          return { ...player, scores: { ...player.scores, [key]: value } };
-        }
-        // With exactly two players, picking 1st fills in 2nd for the other.
-        if (players.length === 2 && value === 1) {
-          const other = player.scores[key];
-          if (typeof other !== 'number' || other === 0) {
-            return { ...player, scores: { ...player.scores, [key]: 2 } };
-          }
-        }
-        return player;
-      }),
+    const next = players.map((player, index) =>
+      index === playerIndex ? { ...player, scores: { ...player.scores, [key]: value } } : player,
     );
+
+    // If exactly one player is still without a place, and the assigned places
+    // form a valid ranking, fill in the next place automatically. This covers
+    // 2 players (1st fills 2nd) and also 3+ (1st + 2nd fills 3rd, ties skip).
+    const unassigned = next
+      .map((player, index) => (Number(player.scores[key] ?? 0) === 0 ? index : -1))
+      .filter((index) => index >= 0);
+    if (unassigned.length === 1) {
+      const assigned = next
+        .map((player) => Number(player.scores[key] ?? 0))
+        .filter((place) => place >= 1 && place <= 3)
+        .sort((a, b) => a - b);
+      let expected = 1;
+      let index = 0;
+      let valid = true;
+      while (index < assigned.length) {
+        const place = assigned[index];
+        let count = 0;
+        while (index < assigned.length && assigned[index] === place) {
+          count += 1;
+          index += 1;
+        }
+        if (place !== expected) {
+          valid = false;
+          break;
+        }
+        expected += count;
+      }
+      if (valid && expected <= 3) {
+        const target = unassigned[0];
+        next[target] = {
+          ...next[target],
+          scores: { ...next[target].scores, [key]: expected },
+        };
+      }
+    }
+
+    onChange(next);
   }
 
   return (
