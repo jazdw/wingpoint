@@ -16,7 +16,8 @@
     "db:migrate": "wrangler d1 migrations apply wingpoint --local",
     "db:migrate:remote": "wrangler d1 migrations apply wingpoint --remote",
     "db:create": "wrangler d1 create wingpoint",
-    "icons": "node scripts/generate-icons.mjs"
+    "icons": "node scripts/generate-icons.mjs",
+    "allow": "node scripts/allow.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.90.2",

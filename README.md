@@ -197,6 +197,22 @@ command to `npx wrangler deploy --domain <your-domain>`, and add `GOOGLE_CLIENT_
 `GOOGLE_CLIENT_SECRET` as secrets. If you use this option you can delete
 `.github/workflows/deploy.yml`.
 
+### Who can sign in
+
+Access is an allow-list in the `allowed_emails` D1 table (plus the optional
+`ALLOWED_EMAILS` variable). Manage it with:
+
+```bash
+npm run allow -- list
+npm run allow -- add friend@gmail.com another@gmail.com --note "Tuesday group"
+npm run allow -- remove friend@gmail.com      # also signs them out everywhere
+```
+
+Commands target production; add `--local` for the local dev database. Removing
+someone keeps their games and stats; pass `--keep-sessions` to leave existing
+sign-ins alone. People must sign in once before they can be invited to games by
+email.
+
 ### D1 for production
 
 Before the first deploy, create the production database and set its id in
