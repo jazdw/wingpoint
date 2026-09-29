@@ -104,7 +104,34 @@ export function ScoreSheet({
   }
 
   function setGoalPlacement(playerIndex: number, round: number, value: number) {
-    setScore(playerIndex, goalRoundKey(round), value);
+    const key = goalRoundKey(round);
+    const updated = players.map((player, index) =>
+      index === playerIndex
+        ? { ...player, scores: { ...player.scores, [key]: value } }
+        : { ...player, scores: { ...player.scores } },
+    );
+
+    // A change can invalidate another player's place (e.g. turning 1st into a
+    // tie removes 2nd). Move any now-invalid places to the next available one.
+    for (let pass = 0; pass < players.length; pass += 1) {
+      let changed = false;
+      updated.forEach((player, index) => {
+        const current = placementOf(player.scores[key]);
+        if (current === 0) return;
+        const others = updated
+          .filter((_, otherIndex) => otherIndex !== index)
+          .map((other) => placementOf(other.scores[key]));
+        const options = goalPlaceOptions(others);
+        if (!options.includes(current)) {
+          const next = options.filter((option) => option > 0).sort((a, b) => b - a)[0] ?? 0;
+          player.scores[key] = next;
+          changed = true;
+        }
+      });
+      if (!changed) break;
+    }
+
+    onChange(updated);
   }
 
   return (
