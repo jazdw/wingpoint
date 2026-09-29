@@ -1048,21 +1048,6 @@ select {
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 30%, transparent);
   background: color-mix(in srgb, var(--danger) 8%, var(--surface));
 }
-.field-invalid {
-  border-color: var(--danger) !important;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 30%, transparent);
-  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
-}
-
-.placement-select {
-  width: auto;
-  min-width: 4.2rem;
-  padding: 0.3rem 0.4rem;
-  border-radius: 8px;
-  border-width: 2px;
-  font-weight: 650;
-  text-align: center;
-}
 .placement-cell {
   display: flex;
   flex-direction: column;
@@ -1070,9 +1055,76 @@ select {
   gap: 0.15rem;
 }
 .placement-points {
+  display: inline-flex;
+  gap: 0.3rem;
   font-size: 0.7rem;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+.placement-place {
+  font-weight: 700;
+  color: var(--text);
+}
+
+.score-actions-error {
+  flex: 1 1 100%;
+  margin: 0;
+}
+
+/* ============================================================
+   Confirm dialog
+   ============================================================ */
+
+.confirm-dialog {
+  width: min(24rem, calc(100vw - 2rem));
+  padding: 0;
+  border: 2px solid var(--border);
+  color: var(--text);
+}
+.confirm-dialog::backdrop {
+  background: rgba(15, 31, 28, 0.45);
+  backdrop-filter: blur(3px);
+}
+.confirm-dialog[open] {
+  animation: celebration-pop 0.2s ease-out;
+}
+.confirm-dialog-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  padding: 1.25rem;
+}
+.confirm-dialog-inner h2 {
+  margin: 0;
+}
+.confirm-dialog-body p {
+  margin: 0;
+}
+.confirm-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.6rem;
+}
+
+.final-standings {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  margin: 0 0 0.6rem;
+  padding: 0;
+  list-style: none;
+}
+.final-standings li {
+  display: flex;
+  justify-content: space-between;
+  padding: 0.45rem 0.7rem;
+  border-radius: 8px;
+  background: var(--surface-2);
+  font-variant-numeric: tabular-nums;
+}
+.final-standings li.winner {
+  background: color-mix(in srgb, var(--accent-soft) 35%, var(--surface));
+  font-weight: 700;
 }
 
 .score-table .tiebreak-row td {
@@ -1386,9 +1438,6 @@ select {
   }
   .score-input .step {
     width: 2.1rem;
-  }
-  .placement-select {
-    min-width: 3.4rem;
   }
   .bars li {
     grid-template-columns: 5rem 1fr 2.2rem;

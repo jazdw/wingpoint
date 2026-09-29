@@ -32,8 +32,8 @@ jobs:
       - name: Lint
         run: npm run lint
 
-      - name: Scoring self-test
-        run: npm run test:scoring
+      - name: Test
+        run: npm test
 
       - name: Build
         run: npm run build

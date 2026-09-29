@@ -3,11 +3,9 @@ import {
   checkComplete,
   computeGame,
   deriveProfile,
-  GOAL_PLACES,
   GOAL_ROUNDS,
   goalRoundKey,
   MAX_PLAYERS,
-  maxGoalPlace,
   MIN_PLAYERS,
   nectarKey,
   normalizeConfig,
@@ -212,16 +210,13 @@ interface PlayerInput {
 function sanitizeScores(profile: ScoringProfile, scores: ScoreMap | undefined): ScoreMap {
   const clean: ScoreMap = {};
 
-  const put = (key: string, raw: number | null | undefined, signed = false, max?: number) => {
+  const put = (key: string, raw: number | null | undefined, signed = false) => {
     if (typeof raw !== 'number' || !Number.isFinite(raw)) {
       clean[key] = 0;
       return;
     }
     let value = Math.round(raw);
-    if (!signed) {
-      value = Math.max(0, value);
-      if (max !== undefined) value = Math.min(max, value);
-    }
+    if (!signed) value = Math.max(0, value);
     clean[key] = value;
   };
 
@@ -234,7 +229,7 @@ function sanitizeScores(profile: ScoringProfile, scores: ScoreMap | undefined): 
     } else if (category.kind === 'roundGoals') {
       for (let round = 1; round <= GOAL_ROUNDS; round += 1) {
         const key = goalRoundKey(round);
-        put(key, scores?.[key], false, profile.goalBoard === 'green' ? GOAL_PLACES.length : undefined);
+        put(key, scores?.[key]);
       }
     } else {
       put(category.id, scores?.[category.id], category.kind === 'signed');
@@ -273,28 +268,6 @@ function normalizePlayers(profile: ScoringProfile, input: unknown): PlayerInput[
   return players;
 }
 
-/**
- * Scoring rules that depend on the player count. Green end-of-round goals only
- * have a 3rd place when there are at least 3 players, for example.
- */
-function validateScores(
-  profile: ScoringProfile,
-  players: PlayerInput[],
-  playerCount: number,
-): string | null {
-  if (profile.goalBoard !== 'green') return null;
-  const maxPlace = maxGoalPlace(playerCount);
-  for (const player of players) {
-    for (let round = 1; round <= GOAL_ROUNDS; round += 1) {
-      const value = player.scores?.[goalRoundKey(round)];
-      if (typeof value === 'number' && value > maxPlace) {
-        return `There is no place ${value} with ${playerCount} players.`;
-      }
-    }
-  }
-  return null;
-}
-
 /** Insert the roster of a newly created game. */
 async function insertPlayers(
   env: Env,
@@ -331,46 +304,53 @@ async function insertPlayers(
   await env.DB.batch(statements);
 }
 
-/** The roster is fixed after creation: same players, order, names and accounts. */
-function sameRoster(existing: PlayerRow[], inputs: PlayerInput[]): boolean {
-  if (existing.length !== inputs.length) return false;
-  return existing.every((row, index) => {
-    const input = inputs[index];
-    return (
-      input.id === row.id &&
-      input.name === row.name &&
-      (input.userId ?? null) === row.user_id
-    );
-  });
-}
-
-/** Update only the scores/points/total of existing players. */
+/** Recompute and store every player's scores, points and total. */
 async function updatePlayerScores(
   env: Env,
   gameId: string,
   profile: ScoringProfile,
-  inputs: PlayerInput[],
+  players: { id: string; scores: ScoreMap }[],
 ): Promise<void> {
-  const computed = computeGame(
-    profile,
-    inputs.map((player) => ({ scores: player.scores ?? {} })),
-  );
+  const computed = computeGame(profile, players);
   const now = Date.now();
-  const statements = inputs.map((input, index) =>
+  const statements = players.map((player, index) =>
     env.DB.prepare(
       `UPDATE game_players
           SET scores = ?, points = ?, total = ?, updated_at = ?
         WHERE id = ? AND game_id = ?`,
     ).bind(
-      JSON.stringify(input.scores ?? {}),
+      JSON.stringify(player.scores),
       JSON.stringify(computed.perPlayer[index] ?? {}),
       computed.totals[index] ?? 0,
       now,
-      input.id,
+      player.id,
       gameId,
     ),
   );
   if (statements.length > 0) await env.DB.batch(statements);
+}
+
+/**
+ * Parse a PATCH `scores` body: `{ [playerId]: ScoreMap }`. The roster is fixed
+ * after creation, so only existing player ids are accepted; players that are
+ * left out keep their current scores.
+ */
+function mergeScores(
+  profile: ScoringProfile,
+  rows: PlayerRow[],
+  input: unknown,
+): { id: string; name: string; scores: ScoreMap }[] | null {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return null;
+  const updates = input as Record<string, unknown>;
+  if (Object.keys(updates).some((id) => !rows.some((row) => row.id === id))) return null;
+  return rows.map((row) => {
+    const update = updates[row.id];
+    const scores =
+      update && typeof update === 'object'
+        ? sanitizeScores(profile, update as ScoreMap)
+        : parseJson<ScoreMap>(row.scores, {});
+    return { id: row.id, name: row.name, scores };
+  });
 }
 
 function configFromBody(body: Record<string, unknown>): GameConfig {
@@ -430,8 +410,6 @@ gameRoutes.post('/', async (c) => {
 
   const validation = validateConfig(config, players.length);
   if (!validation.valid) return c.json({ error: validation.error }, 400);
-  const scoreError = validateScores(profile, players, players.length);
-  if (scoreError) return c.json({ error: scoreError }, 400);
 
   const user = c.get('user');
   const status = STATUSES.includes(body.status as GameStatus)
@@ -517,25 +495,20 @@ gameRoutes.patch('/:id', async (c) => {
   const notes = typeof body.notes === 'string' ? body.notes.slice(0, 2000) : existing.notes;
 
   const existingRows = await loadPlayerRows(c.env, id);
-  let inputs: PlayerInput[] | null = null;
-  if (body.players !== undefined) {
-    inputs = normalizePlayers(profile, body.players);
-    if (!inputs) {
-      return c.json({ error: PLAYERS_ERROR }, 400);
+  let players: { id: string; name: string; scores: ScoreMap }[] | null = null;
+  if (body.scores !== undefined) {
+    players = mergeScores(profile, existingRows, body.scores);
+    if (!players) {
+      return c.json({ error: 'Scores must be keyed by the id of a player in this game.' }, 400);
     }
-    if (!sameRoster(existingRows, inputs)) {
-      return c.json({ error: 'Players cannot be changed after the game is created.' }, 400);
-    }
-    const scoreError = validateScores(profile, inputs, inputs.length);
-    if (scoreError) return c.json({ error: scoreError }, 400);
   }
 
   if (status === 'completed') {
-    const scoresForCheck = (
-      inputs ??
-      existingRows.map((row) => ({ name: row.name, scores: parseJson<ScoreMap>(row.scores, {}) }))
-    ).map((player) => ({ name: player.name, scores: player.scores ?? {} }));
-    const complete = checkComplete(profile, scoresForCheck);
+    const complete = checkComplete(
+      profile,
+      players ??
+        existingRows.map((row) => ({ name: row.name, scores: parseJson<ScoreMap>(row.scores, {}) })),
+    );
     if (!complete.valid) return c.json({ error: complete.error }, 400);
   }
 
@@ -546,9 +519,7 @@ gameRoutes.patch('/:id', async (c) => {
     .bind(playedAt, status, notes, now, id)
     .run();
 
-  if (inputs) {
-    await updatePlayerScores(c.env, id, profile, inputs);
-  }
+  if (players) await updatePlayerScores(c.env, id, profile, players);
 
   const game = await loadGame(c.env, id);
   return c.json({ game });

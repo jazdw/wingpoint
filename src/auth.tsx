@@ -4,6 +4,8 @@ import { useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from './api';
 import type { AuthUser } from '../shared/types';
 
+/** Service worker runtime cache for game data (see vite.config.ts). */
+const API_CACHE = 'wp-api';
 const USER_KEY = 'wp-user';
 
 function readCachedUser(): AuthUser | null {
@@ -80,11 +82,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } catch {
         // ignore
       }
-      // Drop cached API data so it isn't visible to the next user.
+      // Drop cached API data so it isn't visible to the next user. The app
+      // shell precache is kept so the app still opens offline.
       queryClient.clear();
-      if ('caches' in window) {
-        caches.keys().then((keys) => keys.forEach((key) => void caches.delete(key)));
-      }
+      if ('caches' in window) void caches.delete(API_CACHE);
     }
   }, [queryClient]);
 

@@ -7,8 +7,9 @@
  * Flock mode. Special category kinds:
  *
  *  - `nectar`      majority scoring per habitat (Oceania)
- *  - `roundGoals`  the four end-of-round goals (green placements with tie
- *                  splitting, or blue item counts capped at 5)
+ *  - `roundGoals`  the four end-of-round goals, entered as item counts: ranked
+ *                  on the green board (ties split points), or 1 pt per item
+ *                  capped at 5 on the blue board
  *  - `signed`      may be negative (Americas hummingbird track)
  *
  * Both the Worker and the React app import this module so the live UI and the
@@ -109,67 +110,41 @@ export function goalRoundKey(round: number): string {
   return `goalR${round}`;
 }
 
-/** Highest green-board place that exists for this many players (2 players: 2nd). */
-export function maxGoalPlace(playerCount: number): number {
-  return Math.min(GOAL_PLACES.length, playerCount);
-}
-
-function placesAhead(placements: number[], place: number): number {
-  return placements.filter((other) => other >= 1 && other < place).length;
-}
-
 /**
- * Green-board ranking problems for one round (0 = no place / no items).
- *
- * A place must equal 1 + the number of players ranked above it:
- *  - `conflicts`: too many players are ahead — e.g. 2nd after a tie for 1st,
- *    where the rules say the next place is not awarded.
- *  - `gaps`: a better place is missing — e.g. 2nd with nobody 1st. This is
- *    normal while placements are still being entered.
+ * Green board: rank players by how many of the goal item they have. A player
+ * needs at least 1 to place. Tied players share a place and the next place is
+ * skipped (standard competition ranking), so two tied for 1st are followed by
+ * 3rd. Anyone below 3rd gets no place (0 = no place).
  */
-export function goalPlacementIssues(placements: number[]): {
-  conflicts: number[];
-  gaps: number[];
-} {
-  const conflicts: number[] = [];
-  const gaps: number[] = [];
-  const maxPlace = maxGoalPlace(placements.length);
-  placements.forEach((place, index) => {
-    if (place < 1) return;
-    const expected = 1 + placesAhead(placements, place);
-    if (place < expected) conflicts.push(index);
-    else if (place > expected || place > maxPlace) gaps.push(index);
+export function goalPlacesFromCounts(counts: number[]): number[] {
+  return counts.map((count) => {
+    if (count < 1) return 0;
+    const place = 1 + counts.filter((other) => other > count).length;
+    return place <= GOAL_PLACES.length ? place : 0;
   });
-  return { conflicts, gaps };
 }
 
-/**
- * The places player `index` may choose: none, joining a tie, or any place not
- * skipped by players already ranked above it. Places below may still be empty
- * so placements can be entered in any order.
- */
-export function goalPlaceOptions(placements: number[], index: number): number[] {
-  const others = placements.filter((_, otherIndex) => otherIndex !== index);
-  const options = [0];
-  for (let place = 1; place <= maxGoalPlace(placements.length); place += 1) {
-    if (place >= 1 + placesAhead(others, place)) options.push(place);
+export interface GoalRoundResult {
+  /** Green board place per player (0 = none); all 0 on the blue board. */
+  places: number[];
+  points: number[];
+}
+
+/** Places and points for one end-of-round goal from each player's item count. */
+export function computeGoalRound(
+  board: GoalBoard,
+  round: number,
+  counts: (number | null | undefined)[],
+): GoalRoundResult {
+  const clean = counts.map((count) => Math.max(0, Math.round(toNumber(count))));
+  if (board === 'blue') {
+    return {
+      places: clean.map(() => 0),
+      points: clean.map((count) => Math.min(BLUE_GOAL_CAP, count)),
+    };
   }
-  return options;
-}
-
-/**
- * Push players down when a change leaves them ranked too high, keeping their
- * relative order. For example 1st/2nd/3rd with 3rd changed to 1st becomes
- * 1st/3rd/1st (the old 2nd drops to 3rd; 2nd is not awarded after a tie).
- * Anyone pushed past the last place gets no place (4th+ scores 0).
- */
-export function resolveGoalPlacements(placements: number[]): number[] {
-  const maxPlace = maxGoalPlace(placements.length);
-  return placements.map((place) => {
-    if (place < 1) return 0;
-    const resolved = Math.max(place, 1 + placesAhead(placements, place));
-    return resolved > maxPlace ? 0 : resolved;
-  });
+  const places = goalPlacesFromCounts(clean);
+  return { places, points: computeGoalRoundPoints(places, round) };
 }
 
 /* ------------------------------------------------------------------ */
@@ -319,8 +294,8 @@ export function deriveProfile(config: GameConfig, modes: ScoringMode[] = []): Sc
 
 function goalBoardHelp(board: GoalBoard): string {
   return board === 'green'
-    ? 'Green board: enter each player’s placement (1st/2nd/3rd). Ties combine the places and split the points.'
-    : 'Blue board: enter each player’s item count. One point per item, up to a maximum of 5 per round.';
+    ? 'Green board: enter how many of the goal item each player has. Most is 1st; ties share the combined points (rounded down) and the next place is skipped. You need at least 1 to place.'
+    : 'Blue board: enter how many of the goal item each player has. One point per item, up to 5 per round.';
 }
 
 export interface ConfigValidation {
@@ -359,10 +334,7 @@ export function validateConfig(
   return { valid: true };
 }
 
-/**
- * Checks that a game can be completed: every score field is filled in and the
- * green end-of-round goal placements form a valid ranking.
- */
+/** Checks that a game can be completed: every score field is filled in. */
 export interface CompletenessResult {
   valid: boolean;
   error?: string;
@@ -395,32 +367,7 @@ export function checkComplete(
     };
   }
 
-  if (profile.goalBoard === 'green') {
-    const errors: string[] = [];
-    for (let round = 1; round <= GOAL_ROUNDS; round += 1) {
-      const key = goalRoundKey(round);
-      const { conflicts, gaps } = goalPlacementIssues(
-        players.map((player) => goalPlacement(player.scores[key])),
-      );
-      if (conflicts.length > 0) {
-        errors.push(`Round ${round}: after a tie the next place isn’t awarded`);
-      } else if (gaps.length > 0) {
-        errors.push(`Round ${round}: a better place is missing`);
-      }
-      for (const playerIndex of [...conflicts, ...gaps]) fields.push({ player: playerIndex, key });
-    }
-    if (errors.length > 0) {
-      return { valid: false, error: `Check the end-of-round goals. ${errors.join('. ')}.`, fields };
-    }
-  }
-
   return { valid: true, fields: [] };
-}
-
-/** A stored green-board placement as 0 (none) or 1–3. */
-export function goalPlacement(value: number | null | undefined): number {
-  const place = typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : 0;
-  return place >= 1 && place <= GOAL_PLACES.length ? place : 0;
 }
 
 function fieldLabel(profile: ScoringProfile, key: string): string {
@@ -535,16 +482,11 @@ export function computeGame(
 
     for (let round = 1; round <= GOAL_ROUNDS; round += 1) {
       const key = goalRoundKey(round);
-      if (profile.goalBoard === 'blue') {
-        players.forEach((player, index) => {
-          const count = Math.max(0, Math.round(toNumber(player.scores[key])));
-          perPlayer[index][roundGoals.id] += Math.min(BLUE_GOAL_CAP, count);
-        });
-        continue;
-      }
-
-      const placements = players.map((player) => goalPlacement(player.scores[key]));
-      const points = computeGoalRoundPoints(placements, round);
+      const { points } = computeGoalRound(
+        profile.goalBoard,
+        round,
+        players.map((player) => player.scores[key]),
+      );
       points.forEach((value, index) => {
         perPlayer[index][roundGoals.id] += value;
       });
@@ -610,7 +552,7 @@ export function computePlayerPoints(profile: ScoringProfile, scores: ScoreMap): 
 
 export function emptyScores(profile: ScoringProfile): ScoreMap {
   const scores: ScoreMap = {};
-  // Everything defaults to 0 (counts, goal placements, nectar, tie-break).
+  // Everything defaults to 0 (counts, goal items, nectar, tie-break).
   for (const key of fieldKeys(profile)) scores[key] = 0;
   scores[TIEBREAK_KEY] = 0;
   return scores;

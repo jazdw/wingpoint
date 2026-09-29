@@ -2,6 +2,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { BrowserRouter } from 'react-router-dom';
+import { registerSW } from 'virtual:pwa-register';
 import App from './App.tsx';
 import { AuthProvider } from './auth.tsx';
 import { ErrorBoundary } from './components/ErrorBoundary.tsx';
@@ -39,25 +40,8 @@ if (new URLSearchParams(window.location.search).has('reset')) {
   });
 } else if ('serviceWorker' in navigator) {
   if (import.meta.env.PROD) {
-    window.addEventListener('load', () => {
-      navigator.serviceWorker
-        .register('/sw.js')
-        .then((registration) => {
-          registration.addEventListener('updatefound', () => {
-            const worker = registration.installing;
-            if (!worker) return;
-            worker.addEventListener('statechange', () => {
-              // A new version is ready — reload so it takes effect immediately.
-              if (worker.state === 'installed' && navigator.serviceWorker.controller) {
-                window.location.reload();
-              }
-            });
-          });
-        })
-        .catch((error) => {
-          console.warn('Service worker registration failed', error);
-        });
-    });
+    // Precaches the app; a new deploy activates and reloads automatically.
+    registerSW({ immediate: true });
   } else {
     // In dev, clear any stale worker/caches from an earlier preview build.
     void clearServiceWorkerCaches();

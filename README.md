@@ -21,14 +21,15 @@ front end, Google sign-in (allow-list only) and offline support.
 - **Complete or cancel** — mark a game **completed** to count it in stats, or
   **cancel** it to abandon it without deleting. Cancelled games stay in your list
   (marked Cancelled), and are excluded from stats. A game can only be completed
-  once **every score is filled in** and the green goal placements are consistent;
-  the **setup (expansions, goal board) and players are fixed at creation**.
+  once **every score is filled in** (you get a summary to confirm first); the
+  **setup (expansions, goal board) and players are fixed at creation**.
 - **Live viewing** — linked players watch a game update live from their own
   login; only the score master (the game owner) can edit.
 - **Stats across games** — wins, averages, category breakdowns, results by
   player count, and head-to-head records.
-- **PWA** — installable on Android and iOS, with a service-worker app shell so
-  the UI loads offline.
+- **PWA** — installable on Android and iOS. The whole app is precached at
+  install ([vite-plugin-pwa](https://vite-pwa-org.netlify.app/) / Workbox), so it
+  opens offline from the first launch; games you've opened are cached too.
 - **Google OAuth** with an email allow-list.
 
 ## Stack
@@ -39,7 +40,8 @@ front end, Google sign-in (allow-list only) and offline support.
 | Backend  | Cloudflare Worker (TypeScript) with [Hono](https://hono.dev) |
 | Database | Cloudflare D1 (SQLite)                                  |
 | Auth     | Google OAuth 2.0, DB-backed sessions in HttpOnly cookies |
-| PWA      | Hand-rolled service worker + web manifest              |
+| PWA      | vite-plugin-pwa (Workbox `generateSW`) + web manifest  |
+| Tests    | Vitest                                                  |
 
 Scoring logic lives in [`shared/scoring.ts`](shared/scoring.ts) and is imported
 by both the Worker and the browser, so displayed and stored totals always match.
@@ -90,7 +92,8 @@ The dev sign-in works from private network addresses (`192.168.*`, `10.*`,
 | `npm run build`          | Type-check and build for production      |
 | `npm run preview`        | Build and preview locally                |
 | `npm run typecheck`      | Type-check front end and Worker          |
-| `npm run test:scoring`   | Run the scoring-engine self-tests        |
+| `npm test`               | Run the Vitest suite once                |
+| `npm run test:watch`     | Run Vitest in watch mode                 |
 | `npm run lint`           | Run Oxlint                               |
 | `npm run db:migrate`     | Apply migrations to local D1             |
 | `npm run db:migrate:remote` | Apply migrations to production D1     |
@@ -222,8 +225,8 @@ Categories are added to every game as follows:
 When Asia modes are re-enabled, invalid configurations (for example Flock without
 Asia, Duet with other than 2 players) are rejected with a message.
 
-**Green end-of-round goals** are entered per round as a placement
-(1st/2nd/3rd/none) and scored with the official table:
+**Green end-of-round goals** are entered per round as each player's **count of
+the goal item**; WingPoint ranks the players and scores the official table:
 
 | Round | 1st | 2nd | 3rd |
 | ----- | --- | --- | --- |
@@ -232,10 +235,14 @@ Asia, Duet with other than 2 players) are rejected with a message.
 | 3     | 6   | 3   | 2   |
 | 4     | 7   | 4   | 3   |
 
-Ties combine the points for the places the tied players occupy, divide evenly and
-round down (two players tied for 1st in round 1 each get 2). A game needs at
-least **2 players**, and a 3rd-place goal only exists with **3+ players** — both
-are enforced in the UI and rejected on save.
+You need at least 1 item to place. Tied players share the place and the next
+place is skipped: their places' points are combined, divided evenly and rounded
+down (two tied for 1st in round 1 each get 2, and the next player is 3rd). Places
+below 3rd score 0. Games have **2–5 players**, enforced in the UI and on save.
+
+> Known gap (Americas): on the green "hummingbird points" goal, players with zero
+> or negative points can still place if they've moved up the track. Counts below
+> 1 never place here, so that goal can't be recorded exactly yet.
 
 **Blue end-of-round goals** are entered per round as the number of targeted items;
 each scores one point, capped at 5 per round.
@@ -243,7 +250,8 @@ each scores one point, capped at 5 per round.
 The official Oceania rule for a tied nectar majority is the same split. Asia
 **Flock mode** instead uses friendly ties (both get the full points and second place
 stays available). A tie for the highest overall score is broken by **unused food**,
-exactly as in the rulebook — the score sheet includes an "Unused food" row for this.
+exactly as in the rulebook — the score sheet shows an "Unused food" row only when
+the top totals are tied.
 
 Adding a new expansion means adding a category (or profile) in `shared/scoring.ts`
 — no database migration is required because scores are stored as JSON. Known
@@ -267,7 +275,8 @@ migrations/        D1 migrations
 src/               React app
   components/      Layout, score sheet, score input
   pages/           Login, Dashboard, NewGame, GameDetail, Stats
-public/            Manifest, service worker, icons
+  hooks/           useGameDraft (load, edit, auto-save, offline drafts)
+public/            Manifest, icons, fonts (the service worker is generated)
 scripts/           Icon generator
 ```
 

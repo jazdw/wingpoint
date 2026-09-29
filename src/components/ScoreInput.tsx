@@ -37,7 +37,8 @@ export function ScoreInput({
       <input
         type="text"
         inputMode={signed ? 'text' : 'numeric'}
-        value={String(value ?? 0)}
+        value={value === null ? '' : String(value)}
+        placeholder="–"
         aria-label={ariaLabel}
         disabled={disabled}
         onFocus={(event) => event.currentTarget.select()}

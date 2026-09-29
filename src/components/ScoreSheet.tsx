@@ -2,14 +2,11 @@ import { Fragment } from 'react';
 import {
   BLUE_GOAL_CAP,
   computeGame,
-  computeGoalRoundPoints,
+  computeGoalRound,
   GOAL_PLACES,
   GOAL_ROUNDS,
-  goalPlacement,
-  goalPlaceOptions,
   goalRoundKey,
   nectarKey,
-  resolveGoalPlacements,
   TIEBREAK_KEY,
   type ScoringProfile,
 } from '../../shared/scoring';
@@ -46,15 +43,18 @@ export function ScoreSheet({
 }: ScoreSheetProps) {
   const computed = computeGame(profile, players);
   const winnerSet = new Set(computed.winners);
-  // Actual points per round (accounting for tie splitting), shown per input.
-  const roundPoints = Array.from({ length: GOAL_ROUNDS }, (_, index) => {
-    const round = index + 1;
-    const key = goalRoundKey(round);
-    return computeGoalRoundPoints(
-      players.map((player) => goalPlacement(player.scores[key])),
-      round,
-    );
-  });
+  // Place and points per round (ties already split), shown next to each input.
+  const rounds = Array.from({ length: GOAL_ROUNDS }, (_, index) =>
+    computeGoalRound(
+      profile.goalBoard,
+      index + 1,
+      players.map((player) => player.scores[goalRoundKey(index + 1)]),
+    ),
+  );
+  // Unused food only matters when the highest totals are tied.
+  const best = Math.max(0, ...computed.totals);
+  const showTiebreak =
+    best > 0 && computed.totals.filter((total) => total === best).length > 1;
 
   const isInvalid = (playerIndex: number, key: string) =>
     invalidFields?.has(`${playerIndex}:${key}`) ?? false;
@@ -63,23 +63,6 @@ export function ScoreSheet({
     onChange(
       players.map((player, index) =>
         index === playerIndex ? { ...player, scores: { ...player.scores, [key]: value } } : player,
-      ),
-    );
-  }
-
-  function setGoalPlacement(playerIndex: number, round: number, value: number) {
-    const key = goalRoundKey(round);
-    const placements = players.map((player, index) =>
-      index === playerIndex ? value : goalPlacement(player.scores[key]),
-    );
-    // A change can leave others ranked too high (e.g. turning 3rd into a tie
-    // for 1st means the old 2nd is now 3rd), so push them down.
-    const resolved = resolveGoalPlacements(placements);
-    onChange(
-      players.map((player, index) =>
-        resolved[index] === goalPlacement(player.scores[key]) && index !== playerIndex
-          ? player
-          : { ...player, scores: { ...player.scores, [key]: resolved[index] } },
       ),
     );
   }
@@ -163,8 +146,8 @@ export function ScoreSheet({
                     <td className="group-fill" colSpan={players.length}>
                       <span className="muted">
                         {blue
-                          ? `blue board · 1 pt per item, max ${BLUE_GOAL_CAP} per round`
-                          : 'green board · 1st / 2nd / 3rd per round · ties split points'}
+                          ? `items each round · 1 pt each, max ${BLUE_GOAL_CAP}`
+                          : 'items each round · most wins'}
                       </span>
                     </td>
                   </tr>
@@ -172,54 +155,27 @@ export function ScoreSheet({
                     <tr key={round}>
                       <td className="cat-label sub">
                         Round {round}
-                        {blue ? ' count' : ''}
                       </td>
                       {players.map((player, index) => {
                         const key = goalRoundKey(round);
-                        const placements = players.map((other) => goalPlacement(other.scores[key]));
-                        const current = placements[index];
-                        const options = goalPlaceOptions(placements, index);
-                        const optionValues = options.includes(current)
-                          ? options
-                          : [...options, current].sort((a, b) => a - b);
+                        const place = rounds[round - 1].places[index];
+                        const points = rounds[round - 1].points[index];
+                        const placeLabel = GOAL_PLACES.find((item) => item.value === place)?.label;
                         return (
                           <td key={player.id}>
-                            {blue ? (
+                            <div className="placement-cell">
                               <ScoreInput
                                 value={player.scores[key] ?? null}
                                 onChange={(value) => setScore(index, key, value)}
                                 disabled={readOnly}
                                 invalid={isInvalid(index, key)}
-                                ariaLabel={`${player.name} round ${round} count`}
+                                ariaLabel={`${player.name} round ${round} goal count`}
                               />
-                            ) : (
-                              <div className="placement-cell">
-                                <select
-                                  className={`placement-select${
-                                    isInvalid(index, key) ? ' field-invalid' : ''
-                                  }`}
-                                  aria-label={`${player.name} round ${round} placement`}
-                                  value={current}
-                                  disabled={readOnly}
-                                  onChange={(event) =>
-                                    setGoalPlacement(index, round, Number(event.target.value))
-                                  }
-                                >
-                                  {optionValues.map((value) => (
-                                    <option key={value} value={value}>
-                                      {value === 0
-                                        ? '—'
-                                        : (GOAL_PLACES.find((place) => place.value === value)?.label ??
-                                          value)}
-                                    </option>
-                                  ))}
-                                </select>
-                                <span className="placement-points">
-                                  {roundPoints[round - 1][index]}{' '}
-                                  {roundPoints[round - 1][index] === 1 ? 'pt' : 'pts'}
-                                </span>
-                              </div>
-                            )}
+                              <span className="placement-points">
+                                {placeLabel && <span className="placement-place">{placeLabel}</span>}
+                                {points} {points === 1 ? 'pt' : 'pts'}
+                              </span>
+                            </div>
                           </td>
                         );
                       })}
@@ -263,9 +219,10 @@ export function ScoreSheet({
             );
           })}
 
+          {showTiebreak && (
           <tr className="tiebreak-row">
-            <td className="cat-label" title="Only used to break a tie for the highest score.">
-              Unused food
+            <td className="cat-label" title="Breaks a tie for the highest score.">
+              Unused food (tie-break)
               <span className="info" aria-hidden="true">
                 ⓘ
               </span>
@@ -282,6 +239,7 @@ export function ScoreSheet({
               </td>
             ))}
           </tr>
+          )}
         </tbody>
         <tfoot>
           <tr>

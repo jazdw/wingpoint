@@ -10,21 +10,16 @@ import {
   type LocalGameInput,
 } from './localGames';
 
-/** The PATCH body the server expects. */
+/**
+ * The PATCH body the server expects. The setup and roster are fixed after
+ * creation, so only the editable parts are sent, with scores keyed by player.
+ */
 export function gamePayload(game: Game) {
   return {
     playedAt: game.playedAt,
     status: game.status,
-    coreSets: game.coreSets,
-    expansions: game.expansions,
-    goalBoard: game.goalBoard,
     notes: game.notes,
-    players: game.players.map((player) => ({
-      id: player.id,
-      name: player.name,
-      userId: player.userId,
-      scores: player.scores,
-    })),
+    scores: Object.fromEntries(game.players.map((player) => [player.id, player.scores])),
   };
 }
 
