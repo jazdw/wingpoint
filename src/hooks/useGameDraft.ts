@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '../api';
-import { useAuth, useOnline } from '../auth';
+import { useAuth } from './useAuth';
+import { useOnline } from './useOnline';
 import { gamePayload, getGame, persistGame } from '../lib/gameService';
 import { isLocalGameId } from '../lib/localGames';
 import type { Game } from '../../shared/types';

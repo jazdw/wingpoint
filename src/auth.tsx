@@ -1,8 +1,9 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api, ApiError } from './api';
 import type { AuthUser } from '../shared/types';
+import { AuthContext } from './hooks/useAuth';
 
 /** Service worker runtime cache for game data (see vite.config.ts). */
 const API_CACHE = 'wp-api';
@@ -17,18 +18,7 @@ function readCachedUser(): AuthUser | null {
   }
 }
 
-interface AuthState {
-  user: AuthUser | null;
-  loading: boolean;
-  logout: () => Promise<void>;
-}
-
-const AuthContext = createContext<AuthState>({
-  user: null,
-  loading: true,
-  logout: async () => {},
-});
-
+/** Loads the signed-in user (cached for offline use) and provides `useAuth`. */
 export function AuthProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   // Start from the cached user so an offline reload stays signed in.
@@ -92,24 +82,4 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const value = useMemo(() => ({ user, loading, logout }), [user, loading, logout]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-export function useAuth(): AuthState {
-  return useContext(AuthContext);
-}
-
-/** Tracks browser connectivity so the UI can show an offline state. */
-export function useOnline(): boolean {
-  const [online, setOnline] = useState(() => navigator.onLine);
-  useEffect(() => {
-    const on = () => setOnline(true);
-    const off = () => setOnline(false);
-    window.addEventListener('online', on);
-    window.addEventListener('offline', off);
-    return () => {
-      window.removeEventListener('online', on);
-      window.removeEventListener('offline', off);
-    };
-  }, []);
-  return online;
 }

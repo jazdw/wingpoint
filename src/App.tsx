@@ -1,5 +1,5 @@
 import { Navigate, Route, Routes } from 'react-router-dom';
-import { useAuth } from './auth';
+import { useAuth } from './hooks/useAuth';
 import { Layout } from './components/Layout';
 import { Dashboard } from './pages/Dashboard';
 import { GameDetail } from './pages/GameDetail';

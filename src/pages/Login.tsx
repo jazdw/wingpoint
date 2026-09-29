@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../api';
-import { useAuth } from '../auth';
+import { useAuth } from '../hooks/useAuth';
 
 const MESSAGES: Record<string, string> = {
   not_allowed: 'That Google account is not on the WingPoint allow-list. Ask the owner to add your email.',
@@ -45,7 +45,8 @@ export function Login() {
         const body = (await response.json().catch(() => ({}))) as { error?: string };
         throw new Error(body.error ?? `Dev sign-in failed (${response.status})`);
       }
-      window.location.href = '/';
+      // Full reload so the new session cookie is picked up everywhere.
+      window.location.assign('/');
     } catch (caught) {
       setDevError(caught instanceof Error ? caught.message : 'Dev sign-in failed');
       setDevBusy(null);

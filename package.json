@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "preview": "npm run build && vite preview",
     "deploy": "npm run build && wrangler deploy",
-    "lint": "oxlint",
+    "lint": "oxlint --deny-warnings",
     "typecheck": "tsc -b",
     "test": "vitest run",
     "test:watch": "vitest",

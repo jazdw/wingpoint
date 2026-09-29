@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { useAuth } from '../auth';
+import { useAuth } from '../hooks/useAuth';
 
 const LAST_PATH_KEY = 'wp-last-path';
 const RETURN_PATH_KEY = 'wp-return-path';

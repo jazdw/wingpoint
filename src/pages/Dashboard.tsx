@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../api';
-import { useAuth } from '../auth';
+import { useAuth } from '../hooks/useAuth';
 import { listGames } from '../lib/gameService';
 import { deriveProfile, normalizeConfig } from '../../shared/scoring';
 import type { GameSummary, PublicUser, Stats } from '../../shared/types';

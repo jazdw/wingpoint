@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import { api } from '../api';
-import { useAuth } from '../auth';
+import { useAuth } from '../hooks/useAuth';
 import { deriveProfile, normalizeConfig, SELECTABLE_EXPANSIONS } from '../../shared/scoring';
 import type { GameSummary, GoalBoard, Stats } from '../../shared/types';
 import { formatDate } from '../lib/format';
