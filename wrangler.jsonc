@@ -1,15 +1,17 @@
 /**
  * Cloudflare Worker configuration for WingPoint.
  *
- * After creating your D1 database with `npm run db:create`, replace the
- * `database_id` below with the id printed by Wrangler.
+ * `database_id` is the production D1 database (not a secret). If you ever
+ * recreate it with `npm run db:create`, update the id on the `DB` binding —
+ * Wrangler offers to add a new binding instead, which the app doesn't use.
  *
  * Secrets are NOT stored here. Set them with:
  *   npx wrangler secret put GOOGLE_CLIENT_ID
  *   npx wrangler secret put GOOGLE_CLIENT_SECRET
  *
- * `ALLOWED_EMAILS` can be a plain var (comma separated). For local dev put
- * values in `.dev.vars` (see `.dev.vars.example`).
+ * Who can sign in is managed in the `allowed_emails` D1 table (see README).
+ * `ALLOWED_EMAILS` is an optional extra comma-separated list; it is left empty
+ * here because deploys re-apply it. For local dev use `.dev.vars`.
  */
 {
   "$schema": "node_modules/wrangler/config-schema.json",
@@ -24,7 +26,7 @@
     {
       "binding": "DB",
       "database_name": "wingpoint",
-      "database_id": "00000000-0000-0000-0000-000000000000",
+      "database_id": "4570984e-5ba1-4ac6-a21d-d41388ad7438",
       "migrations_dir": "migrations"
     }
   ],
