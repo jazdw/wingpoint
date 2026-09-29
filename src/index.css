@@ -1061,6 +1061,25 @@ select {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
+.round-goal-name {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+.moved-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+.moved-toggle input {
+  width: auto;
+  margin: 0;
+  accent-color: var(--primary);
+}
 .placement-place {
   font-weight: 700;
   color: var(--text);

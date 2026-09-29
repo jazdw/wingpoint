@@ -16,11 +16,7 @@ interface PlayedWith {
 
 function profileLabel(game: GameSummary): string {
   return deriveProfile(
-    normalizeConfig({
-      coreSets: game.coreSets,
-      expansions: game.expansions,
-      goalBoard: game.goalBoard,
-    }),
+    normalizeConfig(game),
   ).name;
 }
 

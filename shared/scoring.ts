@@ -45,6 +45,8 @@ export interface ScoringProfile {
   expansions: string[];
   categories: CategoryDef[];
   goalBoard: GoalBoard;
+  /** See `GameConfig.hummingbirdGoalRound`. */
+  hummingbirdGoalRound: number | null;
   /**
    * How tied nectar majorities are handled.
    * - `split` (standard Oceania): combine the tied places' points and split evenly.
@@ -110,16 +112,26 @@ export function goalRoundKey(round: number): string {
   return `goalR${round}`;
 }
 
+/** Americas "Hummingbird points" goal: 1 if the player moved up the track. */
+export function goalMovedKey(round: number): string {
+  return `goalR${round}Moved`;
+}
+
 /**
- * Green board: rank players by how many of the goal item they have. A player
- * needs at least 1 to place. Tied players share a place and the next place is
- * skipped (standard competition ranking), so two tied for 1st are followed by
- * 3rd. Anyone below 3rd gets no place (0 = no place).
+ * Green board: rank players by how many of the goal item they have. Only
+ * eligible players place — by default those with at least 1. Tied players
+ * share a place and the next place is skipped (standard competition ranking),
+ * so two tied for 1st are followed by 3rd. Anyone below 3rd gets no place
+ * (0 = no place).
  */
-export function goalPlacesFromCounts(counts: number[]): number[] {
-  return counts.map((count) => {
-    if (count < 1) return 0;
-    const place = 1 + counts.filter((other) => other > count).length;
+export function goalPlacesFromCounts(
+  counts: number[],
+  eligible: boolean[] = counts.map((count) => count >= 1),
+): number[] {
+  return counts.map((count, index) => {
+    if (!eligible[index]) return 0;
+    const ahead = counts.filter((other, otherIndex) => eligible[otherIndex] && other > count);
+    const place = 1 + ahead.length;
     return place <= GOAL_PLACES.length ? place : 0;
   });
 }
@@ -130,12 +142,27 @@ export interface GoalRoundResult {
   points: number[];
 }
 
-/** Places and points for one end-of-round goal from each player's item count. */
+/**
+ * Places and points for one end-of-round goal from each player's item count.
+ *
+ * Pass `moved` for the Americas "Hummingbird points" goal on the green board:
+ * counts are then signed track points, and a player qualifies if they moved
+ * up the track (even with zero or negative points).
+ */
 export function computeGoalRound(
   board: GoalBoard,
   round: number,
   counts: (number | null | undefined)[],
+  moved?: (number | null | undefined)[],
 ): GoalRoundResult {
+  if (board === 'green' && moved) {
+    const values = counts.map((count) => Math.round(toNumber(count)));
+    const places = goalPlacesFromCounts(
+      values,
+      moved.map((value) => toNumber(value) >= 1),
+    );
+    return { places, points: computeGoalRoundPoints(places, round) };
+  }
   const clean = counts.map((count) => Math.max(0, Math.round(toNumber(count))));
   if (board === 'blue') {
     return {
@@ -232,11 +259,18 @@ export function normalizeConfig(config: Partial<GameConfig> | null | undefined):
     : [];
   expansions.sort((a, b) => a.localeCompare(b));
 
-  return {
-    coreSets,
-    expansions,
-    goalBoard: config?.goalBoard === 'blue' ? 'blue' : 'green',
-  };
+  const goalBoard: GoalBoard = config?.goalBoard === 'blue' ? 'blue' : 'green';
+  const round = Number(config?.hummingbirdGoalRound);
+  const hummingbirdGoalRound =
+    expansions.includes('americas') &&
+    goalBoard === 'green' &&
+    Number.isInteger(round) &&
+    round >= 1 &&
+    round <= GOAL_ROUNDS
+      ? round
+      : null;
+
+  return { coreSets, expansions, goalBoard, hummingbirdGoalRound };
 }
 
 export function configProfileId(config: GameConfig, modes: ScoringMode[] = []): string {
@@ -288,6 +322,7 @@ export function deriveProfile(config: GameConfig, modes: ScoringMode[] = []): Sc
     expansions: [...config.coreSets, ...config.expansions],
     categories,
     goalBoard: config.goalBoard,
+    hummingbirdGoalRound: config.hummingbirdGoalRound,
     nectarTies,
   };
 }
@@ -379,7 +414,8 @@ function fieldLabel(profile: ScoringProfile, key: string): string {
         ?.habitats?.find((item) => item.id === habitat)?.label ?? key
     );
   }
-  if (key.startsWith('goalR')) return `Round ${key.slice('goalR'.length)} goal`;
+  const goal = /^goalR(\d)(Moved)?$/.exec(key);
+  if (goal) return goal[2] ? `Round ${goal[1]} track moved` : `Round ${goal[1]} goal`;
   return profile.categories.find((category) => category.id === key)?.label ?? key;
 }
 
@@ -399,7 +435,10 @@ export function fieldKeys(profile: ScoringProfile): string[] {
     if (category.kind === 'nectar' && category.habitats) {
       for (const habitat of category.habitats) keys.push(nectarKey(habitat.id));
     } else if (category.kind === 'roundGoals') {
-      for (let round = 1; round <= GOAL_ROUNDS; round += 1) keys.push(goalRoundKey(round));
+      for (let round = 1; round <= GOAL_ROUNDS; round += 1) {
+        keys.push(goalRoundKey(round));
+        if (round === profile.hummingbirdGoalRound) keys.push(goalMovedKey(round));
+      }
     } else {
       keys.push(category.id);
     }
@@ -486,6 +525,9 @@ export function computeGame(
         profile.goalBoard,
         round,
         players.map((player) => player.scores[key]),
+        round === profile.hummingbirdGoalRound
+          ? players.map((player) => player.scores[goalMovedKey(round)])
+          : undefined,
       );
       points.forEach((value, index) => {
         perPlayer[index][roundGoals.id] += value;

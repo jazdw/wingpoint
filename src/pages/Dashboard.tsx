@@ -22,11 +22,7 @@ function GameCard({
   const players = [...game.players].sort((a, b) => b.total - a.total);
   const winnerIds = new Set(game.winners);
   const profileName = deriveProfile(
-    normalizeConfig({
-      coreSets: game.coreSets,
-      expansions: game.expansions,
-      goalBoard: game.goalBoard,
-    }),
+    normalizeConfig(game),
   ).name;
   const isInvited = currentUserId
     ? game.players.some((player) => player.userId === currentUserId && player.status === 'pending')

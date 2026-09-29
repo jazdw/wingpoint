@@ -266,6 +266,13 @@ function GameView({ id }: { id: string }) {
           </span>
         </div>
 
+        {config.hummingbirdGoalRound && (
+          <div className="setup-row">
+            <span className="setup-label">Hummingbird points goal</span>
+            <span className="badge">Round {config.hummingbirdGoalRound}</span>
+          </div>
+        )}
+
         <p className="fine-print">The setup and players are fixed when the game is created.</p>
       </div>
 

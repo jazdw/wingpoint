@@ -4,6 +4,7 @@ import {
   computeGame,
   deriveProfile,
   GOAL_ROUNDS,
+  goalMovedKey,
   goalRoundKey,
   MAX_PLAYERS,
   MIN_PLAYERS,
@@ -40,6 +41,7 @@ export interface GameRow {
   core_sets: string;
   expansions: string;
   goal_board: string;
+  hummingbird_goal_round: number | null;
   notes: string | null;
   created_at: number;
   updated_at: number;
@@ -68,12 +70,13 @@ function parseJson<T>(value: string | null | undefined, fallback: T): T {
 }
 
 export function configForGame(
-  row: Pick<GameRow, 'core_sets' | 'expansions' | 'goal_board'>,
+  row: Pick<GameRow, 'core_sets' | 'expansions' | 'goal_board' | 'hummingbird_goal_round'>,
 ): GameConfig {
   return normalizeConfig({
     coreSets: parseJson<CoreSet[]>(row.core_sets, ['wingspan']),
     expansions: parseJson<string[]>(row.expansions, []),
     goalBoard: row.goal_board === 'blue' ? 'blue' : 'green',
+    hummingbirdGoalRound: row.hummingbird_goal_round,
   });
 }
 
@@ -104,6 +107,7 @@ function serializeGame(row: GameRow, players: PlayerRow[]): Game {
     coreSets: config.coreSets,
     expansions: config.expansions,
     goalBoard: config.goalBoard,
+    hummingbirdGoalRound: config.hummingbirdGoalRound,
     notes: row.notes,
     players: players.map(serializePlayer),
     createdAt: row.created_at,
@@ -129,6 +133,7 @@ export function serializeSummary(row: GameRow, players: PlayerRow[]): GameSummar
     coreSets: config.coreSets,
     expansions: config.expansions,
     goalBoard: config.goalBoard,
+    hummingbirdGoalRound: config.hummingbirdGoalRound,
     scored: computed.totals.some((total) => total > 0),
     players: ordered.map((player, index) => ({
       id: player.id,
@@ -229,7 +234,14 @@ function sanitizeScores(profile: ScoringProfile, scores: ScoreMap | undefined): 
     } else if (category.kind === 'roundGoals') {
       for (let round = 1; round <= GOAL_ROUNDS; round += 1) {
         const key = goalRoundKey(round);
-        put(key, scores?.[key]);
+        if (round === profile.hummingbirdGoalRound) {
+          // Signed track points, plus whether the player moved up the track.
+          put(key, scores?.[key], true);
+          const moved = goalMovedKey(round);
+          clean[moved] = scores?.[moved] ? 1 : 0;
+        } else {
+          put(key, scores?.[key]);
+        }
       }
     } else {
       put(category.id, scores?.[category.id], category.kind === 'signed');
@@ -358,6 +370,8 @@ function configFromBody(body: Record<string, unknown>): GameConfig {
     coreSets: Array.isArray(body.coreSets) ? (body.coreSets as CoreSet[]) : undefined,
     expansions: Array.isArray(body.expansions) ? (body.expansions as string[]) : undefined,
     goalBoard: (body.goalBoard as GoalBoard) ?? 'green',
+    hummingbirdGoalRound:
+      typeof body.hummingbirdGoalRound === 'number' ? body.hummingbirdGoalRound : null,
   });
 }
 
@@ -426,8 +440,9 @@ gameRoutes.post('/', async (c) => {
 
   await c.env.DB.prepare(
     `INSERT INTO games
-       (id, owner_id, played_at, status, core_sets, expansions, goal_board, notes, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, owner_id, played_at, status, core_sets, expansions, goal_board,
+        hummingbird_goal_round, notes, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   )
     .bind(
       id,
@@ -437,6 +452,7 @@ gameRoutes.post('/', async (c) => {
       JSON.stringify(config.coreSets),
       JSON.stringify(config.expansions),
       config.goalBoard,
+      config.hummingbirdGoalRound,
       typeof body.notes === 'string' ? body.notes.slice(0, 2000) : null,
       now,
       now,
@@ -472,11 +488,17 @@ gameRoutes.patch('/:id', async (c) => {
   // The setup (sets, expansions, goal board) is fixed when the game is created.
   // The client sends the unchanged setup on every save, so only reject an
   // actual change.
-  if (body.coreSets !== undefined || body.expansions !== undefined || body.goalBoard !== undefined) {
+  if (
+    body.coreSets !== undefined ||
+    body.expansions !== undefined ||
+    body.goalBoard !== undefined ||
+    body.hummingbirdGoalRound !== undefined
+  ) {
     const requested = configFromBody(body);
     const current = configForGame(existing);
     const unchanged =
       requested.goalBoard === current.goalBoard &&
+      requested.hummingbirdGoalRound === current.hummingbirdGoalRound &&
       requested.coreSets.join(',') === current.coreSets.join(',') &&
       requested.expansions.join(',') === current.expansions.join(',');
     if (!unchanged) {

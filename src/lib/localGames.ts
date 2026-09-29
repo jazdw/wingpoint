@@ -9,6 +9,7 @@ export interface LocalGameInput {
   coreSets: CoreSet[];
   expansions: string[];
   goalBoard: GoalBoard;
+  hummingbirdGoalRound?: number | null;
   players: { id?: string; name: string }[];
   playedAt?: number;
   status?: GameStatus;
@@ -36,11 +37,7 @@ function writeAll(games: Game[]): void {
 }
 
 function configOf(game: Game) {
-  return normalizeConfig({
-    coreSets: game.coreSets,
-    expansions: game.expansions,
-    goalBoard: game.goalBoard,
-  });
+  return normalizeConfig(game);
 }
 
 function summarize(game: Game): GameSummary {
@@ -57,6 +54,7 @@ function summarize(game: Game): GameSummary {
     coreSets: game.coreSets,
     expansions: game.expansions,
     goalBoard: game.goalBoard,
+    hummingbirdGoalRound: game.hummingbirdGoalRound ?? null,
     scored: computed.totals.some((total) => total > 0),
     players: game.players.map((player, index) => ({
       id: player.id,
@@ -83,11 +81,7 @@ export function getLocalGame(id: string): Game | null {
 
 export function createLocalGame(input: LocalGameInput): Game {
   const now = Date.now();
-  const config = normalizeConfig({
-    coreSets: input.coreSets,
-    expansions: input.expansions,
-    goalBoard: input.goalBoard,
-  });
+  const config = normalizeConfig(input);
   const profile = deriveProfile(config);
   const game: Game = {
     id: `${LOCAL_PREFIX}${newId()}`,
@@ -97,6 +91,7 @@ export function createLocalGame(input: LocalGameInput): Game {
     coreSets: config.coreSets,
     expansions: config.expansions,
     goalBoard: config.goalBoard,
+    hummingbirdGoalRound: config.hummingbirdGoalRound,
     notes: null,
     players: input.players.map((player, index) => ({
       id: player.id ?? newId(),

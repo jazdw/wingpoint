@@ -5,6 +5,7 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import {
   deriveProfile,
+  GOAL_ROUNDS,
   MAX_PLAYERS,
   MIN_PLAYERS,
   normalizeConfig,
@@ -35,6 +36,7 @@ export function NewGame() {
 
   const [expansions, setExpansions] = useState<string[]>([]);
   const [goalBoard, setGoalBoard] = useState<GoalBoard>('green');
+  const [hummingbirdGoalRound, setHummingbirdGoalRound] = useState<number | null>(null);
   const [players, setPlayers] = useState<DraftPlayer[]>([
     { id: newId(), name: user?.name ?? 'Player 1', userId: user?.id ?? null },
   ]);
@@ -42,7 +44,8 @@ export function NewGame() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteError, setInviteError] = useState<string | null>(null);
 
-  const config = normalizeConfig({ expansions, goalBoard });
+  const config = normalizeConfig({ expansions, goalBoard, hummingbirdGoalRound });
+  const offerHummingbirdGoal = config.expansions.includes('americas') && config.goalBoard === 'green';
   const profile = deriveProfile(config);
   const validation = validateConfig(config, players.length);
   const selectedUserIds = new Set(players.map((player) => player.userId).filter(Boolean) as string[]);
@@ -133,6 +136,7 @@ export function NewGame() {
       coreSets: config.coreSets,
       expansions: config.expansions,
       goalBoard: config.goalBoard,
+      hummingbirdGoalRound: config.hummingbirdGoalRound,
       // Local (guest) games have no linked accounts.
       players: user
         ? cleanPlayers
@@ -191,6 +195,29 @@ export function NewGame() {
             ))}
           </div>
         </div>
+
+        {offerHummingbirdGoal && (
+          <label className="setup-row">
+            <span className="setup-label">Hummingbird points goal</span>
+            <select
+              value={config.hummingbirdGoalRound ?? ''}
+              onChange={(event) =>
+                setHummingbirdGoalRound(event.target.value ? Number(event.target.value) : null)
+              }
+            >
+              <option value="">Not in play</option>
+              {Array.from({ length: GOAL_ROUNDS }, (_, index) => index + 1).map((round) => (
+                <option key={round} value={round}>
+                  Round {round}
+                </option>
+              ))}
+            </select>
+            <span className="fine-print">
+              If a round’s goal is “Hummingbird points”, pick it: that round is ranked by track
+              points (which can be 0 or negative) among players who moved up the track.
+            </span>
+          </label>
+        )}
 
         <p className="fine-print">{profile.name}</p>
       </div>

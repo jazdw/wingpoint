@@ -77,6 +77,48 @@ describe('green end-of-round goals (from item counts)', () => {
   });
 });
 
+describe('Americas "Hummingbird points" goal (green board)', () => {
+  const americas = (round: number | null, board: GoalBoard = 'green') =>
+    deriveProfile(
+      normalizeConfig({ expansions: ['americas'], goalBoard: board, hummingbirdGoalRound: round }),
+    );
+
+  it('ranks signed points among players who moved up the track', () => {
+    // 2 points, 0 points but moved, -1 points but moved, and never moved.
+    expect(computeGoalRound('green', 1, [2, 0, -1, 0], [1, 1, 1, 0])).toEqual({
+      places: [1, 2, 3, 0],
+      points: [4, 1, 0, 0],
+    });
+    // Two moved players tied at -2 share 1st: (5 + 2) / 2 = 3.
+    expect(computeGoalRound('green', 2, [-2, -2, 0], [1, 1, 0]).points).toEqual([3, 3, 0]);
+  });
+  it('scores only the chosen round that way', () => {
+    const game = computeGame(
+      americas(3),
+      players([
+        { goalR3: -1, goalR3Moved: 1, goalR1: 0 },
+        { goalR3: -4, goalR3Moved: 0, goalR1: 2 },
+      ]),
+    );
+    // Round 3: only the first player qualifies (6). Round 1: the second (4).
+    expect(game.perPlayer.map((points) => points.endOfRoundGoals)).toEqual([6, 4]);
+  });
+  it('requires the moved flag to be filled in for that round', () => {
+    const profile3 = americas(3);
+    expect(
+      checkComplete(profile3, [{ name: 'A', scores: { goalR3: 1 } }]).fields.some(
+        (field) => field.key === 'goalR3Moved',
+      ),
+    ).toBe(true);
+  });
+  it('only applies with Americas on the green board', () => {
+    expect(normalizeConfig({ expansions: ['americas'], hummingbirdGoalRound: 2 }).hummingbirdGoalRound).toBe(2);
+    expect(normalizeConfig({ hummingbirdGoalRound: 2 }).hummingbirdGoalRound).toBeNull();
+    expect(americas(2, 'blue').hummingbirdGoalRound).toBeNull();
+    expect(normalizeConfig({ expansions: ['americas'], hummingbirdGoalRound: 5 }).hummingbirdGoalRound).toBeNull();
+  });
+});
+
 describe('blue end-of-round goals', () => {
   it('scores 1 per item, capped at 5 per round', () => {
     expect(computeGoalRound('blue', 1, [3, 7, 0]).points).toEqual([3, 5, 0]);

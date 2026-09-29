@@ -18,6 +18,12 @@ export interface GameConfig {
   /** Expansion ids mixed in (European, Oceania, Americas). */
   expansions: string[];
   goalBoard: GoalBoard;
+  /**
+   * Americas + green board: the round (1–4) whose goal is "Hummingbird points",
+   * or null. That goal is ranked by signed track points, and only players who
+   * moved up the track at least once qualify.
+   */
+  hummingbirdGoalRound: number | null;
 }
 
 export interface GamePlayer {
@@ -40,6 +46,7 @@ export interface Game {
   coreSets: CoreSet[];
   expansions: string[];
   goalBoard: GoalBoard;
+  hummingbirdGoalRound?: number | null;
   notes: string | null;
   players: GamePlayer[];
   createdAt: number;
@@ -56,6 +63,7 @@ export interface GameSummary {
   coreSets: CoreSet[];
   expansions: string[];
   goalBoard: GoalBoard;
+  hummingbirdGoalRound?: number | null;
   scored: boolean;
   players: {
     id: string;

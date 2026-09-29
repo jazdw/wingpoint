@@ -5,6 +5,7 @@ import {
   computeGoalRound,
   GOAL_PLACES,
   GOAL_ROUNDS,
+  goalMovedKey,
   goalRoundKey,
   nectarKey,
   TIEBREAK_KEY,
@@ -44,13 +45,17 @@ export function ScoreSheet({
   const computed = computeGame(profile, players);
   const winnerSet = new Set(computed.winners);
   // Place and points per round (ties already split), shown next to each input.
-  const rounds = Array.from({ length: GOAL_ROUNDS }, (_, index) =>
-    computeGoalRound(
+  const rounds = Array.from({ length: GOAL_ROUNDS }, (_, index) => {
+    const round = index + 1;
+    return computeGoalRound(
       profile.goalBoard,
-      index + 1,
-      players.map((player) => player.scores[goalRoundKey(index + 1)]),
-    ),
-  );
+      round,
+      players.map((player) => player.scores[goalRoundKey(round)]),
+      round === profile.hummingbirdGoalRound
+        ? players.map((player) => player.scores[goalMovedKey(round)])
+        : undefined,
+    );
+  });
   // Unused food only matters when the highest totals are tied.
   const best = Math.max(0, ...computed.totals);
   const showTiebreak =
@@ -153,11 +158,23 @@ export function ScoreSheet({
                   </tr>
                   {Array.from({ length: GOAL_ROUNDS }, (_, index) => index + 1).map((round) => (
                     <tr key={round}>
-                      <td className="cat-label sub">
+                      <td
+                        className="cat-label sub"
+                        title={
+                          round === profile.hummingbirdGoalRound
+                            ? 'Hummingbird points: enter each player’s track points (may be 0 or negative) and tick if they moved up the track at least once — only they can place.'
+                            : undefined
+                        }
+                      >
                         Round {round}
+                        {round === profile.hummingbirdGoalRound && (
+                          <span className="round-goal-name">Hummingbird pts</span>
+                        )}
                       </td>
                       {players.map((player, index) => {
                         const key = goalRoundKey(round);
+                        const hummingbird = round === profile.hummingbirdGoalRound;
+                        const movedKey = goalMovedKey(round);
                         const place = rounds[round - 1].places[index];
                         const points = rounds[round - 1].points[index];
                         const placeLabel = GOAL_PLACES.find((item) => item.value === place)?.label;
@@ -168,9 +185,25 @@ export function ScoreSheet({
                                 value={player.scores[key] ?? null}
                                 onChange={(value) => setScore(index, key, value)}
                                 disabled={readOnly}
+                                signed={hummingbird}
                                 invalid={isInvalid(index, key)}
-                                ariaLabel={`${player.name} round ${round} goal count`}
+                                ariaLabel={`${player.name} round ${round} goal ${
+                                  hummingbird ? 'hummingbird points' : 'count'
+                                }`}
                               />
+                              {hummingbird && (
+                                <label className="moved-toggle">
+                                  <input
+                                    type="checkbox"
+                                    checked={Boolean(player.scores[movedKey])}
+                                    disabled={readOnly}
+                                    onChange={(event) =>
+                                      setScore(index, movedKey, event.target.checked ? 1 : 0)
+                                    }
+                                  />
+                                  moved up
+                                </label>
+                              )}
                               <span className="placement-points">
                                 {placeLabel && <span className="placement-place">{placeLabel}</span>}
                                 {points} {points === 1 ? 'pt' : 'pts'}

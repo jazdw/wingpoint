@@ -38,6 +38,8 @@ CREATE TABLE IF NOT EXISTS games (
   core_sets       TEXT NOT NULL DEFAULT '["wingspan"]',  -- JSON array of standalone sets
   expansions      TEXT NOT NULL DEFAULT '[]',            -- JSON array of expansion ids
   goal_board      TEXT NOT NULL DEFAULT 'green',          -- green | blue
+  -- Americas + green board: round (1–4) with the "Hummingbird points" goal.
+  hummingbird_goal_round INTEGER,
   notes           TEXT,
   created_at      INTEGER NOT NULL,
   updated_at      INTEGER NOT NULL

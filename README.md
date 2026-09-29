@@ -240,9 +240,11 @@ place is skipped: their places' points are combined, divided evenly and rounded
 down (two tied for 1st in round 1 each get 2, and the next player is 3rd). Places
 below 3rd score 0. Games have **2–5 players**, enforced in the UI and on save.
 
-> Known gap (Americas): on the green "hummingbird points" goal, players with zero
-> or negative points can still place if they've moved up the track. Counts below
-> 1 never place here, so that goal can't be recorded exactly yet.
+**Americas "Hummingbird points" goal (green board):** players rank by their
+signed hummingbird-track points, and anyone who moved up the track at least
+once qualifies, even with 0 or negative points. Choose the round with this goal
+at setup; that round then takes signed points plus a "moved up" checkbox per
+player.
 
 **Blue end-of-round goals** are entered per round as the number of targeted items;
 each scores one point, capped at 5 per round.
