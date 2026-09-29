@@ -18,6 +18,11 @@
   "name": "wingpoint",
   "main": "worker/index.ts",
   "compatibility_date": "2026-09-26",
+  // Served only from the custom domain, which is kept out of the repo: CI
+  // deploys with `--domain` from the CUSTOM_DOMAIN Actions secret (see
+  // .github/workflows/deploy.yml). Manually: npm run deploy -- --domain <host>
+  "workers_dev": false,
+  "preview_urls": false,
   "assets": {
     "not_found_handling": "single-page-application",
     "binding": "ASSETS"

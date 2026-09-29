@@ -38,6 +38,15 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Check deploy secrets
+        env:
+          CUSTOM_DOMAIN: ${{ secrets.CUSTOM_DOMAIN }}
+        run: |
+          if [ -z "$CUSTOM_DOMAIN" ]; then
+            echo "::error::Set the CUSTOM_DOMAIN Actions secret (e.g. app.example.com)."
+            exit 1
+          fi
+
       - name: Apply D1 migrations
         uses: cloudflare/wrangler-action@v3
         with:
@@ -45,9 +54,10 @@ jobs:
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           command: d1 migrations apply wingpoint --remote
 
+      # The custom domain lives in a secret so it isn't committed to the repo.
       - name: Deploy Worker
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: deploy
+          command: deploy --domain ${{ secrets.CUSTOM_DOMAIN }}

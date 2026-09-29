@@ -179,13 +179,21 @@ D1 migrations and deploys on every push to `main`. Add these repository secrets:
 | ------------------------ | ------------------------------------------------------------ |
 | `CLOUDFLARE_API_TOKEN`   | Cloudflare dashboard → My Profile → API Tokens (Workers + D1 edit) |
 | `CLOUDFLARE_ACCOUNT_ID`  | Cloudflare dashboard → Workers & Pages → Account ID          |
+| `CUSTOM_DOMAIN`          | The hostname to serve from, e.g. `app.example.com` (its zone must be on your Cloudflare account) |
+
+The custom domain is deliberately kept out of the repo: the workflow deploys
+with `wrangler deploy --domain "$CUSTOM_DOMAIN"`, and `wrangler.jsonc` turns off
+the `workers.dev` and preview URLs so the app has a single origin. To deploy by
+hand, pass the domain yourself: `npm run deploy -- --domain app.example.com`.
+The API token may also need **Zone → Workers Routes → Edit** (and **Zone → DNS →
+Edit**) for that zone to attach the domain.
 
 ### Option B — Cloudflare Workers Builds (dashboard Git integration)
 
 Cloudflare can build and deploy straight from your Git provider without a
 committed workflow. In **Workers & Pages → your Worker → Settings → Builds**,
 connect the repository, set the build command to `npm run build`, the deploy
-command to `npx wrangler deploy`, and add `GOOGLE_CLIENT_ID` /
+command to `npx wrangler deploy --domain <your-domain>`, and add `GOOGLE_CLIENT_ID` /
 `GOOGLE_CLIENT_SECRET` as secrets. If you use this option you can delete
 `.github/workflows/deploy.yml`.
 
