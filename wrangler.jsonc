@@ -25,7 +25,11 @@
   "preview_urls": false,
   "assets": {
     "not_found_handling": "single-page-application",
-    "binding": "ASSETS"
+    "binding": "ASSETS",
+    // In SPA mode, browser navigations are answered with index.html before
+    // the Worker runs. API routes that the browser navigates to (the Google
+    // OAuth start and callback) must always reach the Worker.
+    "run_worker_first": ["/api/*"]
   },
   "d1_databases": [
     {
