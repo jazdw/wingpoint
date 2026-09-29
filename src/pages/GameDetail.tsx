@@ -103,7 +103,6 @@ export function GameDetail() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [completeError, setCompleteError] = useState<string | null>(null);
   const [celebrate, setCelebrate] = useState(false);
-  const [showErrors, setShowErrors] = useState(false);
   const previousStatus = useRef<Game['status'] | null>(null);
   const lastSaved = useRef('');
   const initialised = useRef(false);
@@ -310,9 +309,9 @@ export function GameDetail() {
     profile,
     game.players.map((player) => ({ name: player.name, scores: player.scores })),
   );
-  const invalidFields = showErrors
-    ? new Set(completion.fields.map((field) => `${field.player}:${field.key}`))
-    : new Set<string>();
+  const invalidFields = new Set(
+    completion.fields.map((field) => `${field.player}:${field.key}`),
+  );
 
   function update(partial: Partial<Game>) {
     if (readOnly) return;
@@ -321,11 +320,9 @@ export function GameDetail() {
 
   function completeGame() {
     if (!completion.valid) {
-      setShowErrors(true);
       setCompleteError(completion.error ?? 'The game is not ready to complete.');
       return;
     }
-    setShowErrors(false);
     setCompleteError(null);
     update({ status: 'completed' });
   }

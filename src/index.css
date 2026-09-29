@@ -1046,10 +1046,12 @@ select {
 .score-input-invalid {
   border-color: var(--danger);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 30%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
 }
 .field-invalid {
   border-color: var(--danger) !important;
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--danger) 30%, transparent);
+  background: color-mix(in srgb, var(--danger) 8%, var(--surface));
 }
 
 .placement-select {
