@@ -5,6 +5,8 @@ import { api } from '../api';
 import { useAuth } from '../auth';
 import {
   deriveProfile,
+  MAX_PLAYERS,
+  MIN_PLAYERS,
   normalizeConfig,
   SELECTABLE_EXPANSIONS,
   validateConfig,
@@ -196,7 +198,7 @@ export function NewGame() {
       <div className="card stack-sm">
         <div className="section-head">
           <h2>Players</h2>
-          <button type="button" className="btn btn-sm" onClick={addPlayer} disabled={players.length >= 8}>
+          <button type="button" className="btn btn-sm" onClick={addPlayer} disabled={players.length >= MAX_PLAYERS}>
             Add player
           </button>
         </div>
@@ -272,7 +274,7 @@ export function NewGame() {
                 type="button"
                 className="btn btn-ghost btn-sm"
                 onClick={() => removePlayer(index)}
-                disabled={players.length <= 2}
+                disabled={players.length <= MIN_PLAYERS}
               >
                 Remove
               </button>
@@ -306,7 +308,7 @@ export function NewGame() {
         )}
         {inviteError && <p className="alert alert-error">{inviteError}</p>}
         <p className="fine-print">
-          A game needs at least 2 players. Invite a WingPoint account by email; people you’ve
+          Wingspan is played with 2–5 players. Invite a WingPoint account by email; people you’ve
           already played with appear in the dropdown. Invitations are sent when you start the
           game — linked players must accept before it counts for them. Guests are tracked by name.
         </p>

@@ -5,8 +5,11 @@ import {
   computeGoalRoundPoints,
   GOAL_PLACES,
   GOAL_ROUNDS,
+  goalPlacement,
+  goalPlaceOptions,
   goalRoundKey,
   nectarKey,
+  resolveGoalPlacements,
   TIEBREAK_KEY,
   type ScoringProfile,
 } from '../../shared/scoring';
@@ -33,45 +36,6 @@ interface ScoreSheetProps {
   readOnly?: boolean;
 }
 
-function placementOf(value: number | null | undefined): number {
-  const numeric = typeof value === 'number' ? Math.round(value) : 0;
-  return numeric >= 0 && numeric <= 3 ? numeric : 0;
-}
-
-/**
- * The places a player may take, given the other players' places this round.
- * You can join an existing tie or take the next place, but not a place skipped
- * by a tie (two tied for 1st means 2nd is not awarded — the next is 3rd).
- */
-function goalPlaceOptions(others: number[]): number[] {
-  const assigned = others.filter((place) => place >= 1 && place <= 3).sort((a, b) => a - b);
-  if (assigned.length === 0) return [0, 1, 2, 3];
-
-  const groups: { place: number; size: number }[] = [];
-  let index = 0;
-  while (index < assigned.length) {
-    const place = assigned[index];
-    let size = 0;
-    while (index < assigned.length && assigned[index] === place) {
-      size += 1;
-      index += 1;
-    }
-    groups.push({ place, size });
-  }
-
-  let expected = 1;
-  for (const group of groups) {
-    // If the current places aren't a valid ranking prefix, don't restrict.
-    if (group.place !== expected) return [0, 1, 2, 3];
-    expected += group.size;
-  }
-
-  const options = new Set<number>([0]);
-  for (const group of groups) options.add(group.place);
-  if (expected <= 3) options.add(expected);
-  return [...options].sort((a, b) => a - b);
-}
-
 export function ScoreSheet({
   profile,
   players,
@@ -87,7 +51,7 @@ export function ScoreSheet({
     const round = index + 1;
     const key = goalRoundKey(round);
     return computeGoalRoundPoints(
-      players.map((player) => placementOf(player.scores[key])),
+      players.map((player) => goalPlacement(player.scores[key])),
       round,
     );
   });
@@ -105,33 +69,19 @@ export function ScoreSheet({
 
   function setGoalPlacement(playerIndex: number, round: number, value: number) {
     const key = goalRoundKey(round);
-    const updated = players.map((player, index) =>
-      index === playerIndex
-        ? { ...player, scores: { ...player.scores, [key]: value } }
-        : { ...player, scores: { ...player.scores } },
+    const placements = players.map((player, index) =>
+      index === playerIndex ? value : goalPlacement(player.scores[key]),
     );
-
-    // A change can invalidate another player's place (e.g. turning 1st into a
-    // tie removes 2nd). Move any now-invalid places to the next available one.
-    for (let pass = 0; pass < players.length; pass += 1) {
-      let changed = false;
-      updated.forEach((player, index) => {
-        const current = placementOf(player.scores[key]);
-        if (current === 0) return;
-        const others = updated
-          .filter((_, otherIndex) => otherIndex !== index)
-          .map((other) => placementOf(other.scores[key]));
-        const options = goalPlaceOptions(others);
-        if (!options.includes(current)) {
-          const next = options.filter((option) => option > 0).sort((a, b) => b - a)[0] ?? 0;
-          player.scores[key] = next;
-          changed = true;
-        }
-      });
-      if (!changed) break;
-    }
-
-    onChange(updated);
+    // A change can leave others ranked too high (e.g. turning 3rd into a tie
+    // for 1st means the old 2nd is now 3rd), so push them down.
+    const resolved = resolveGoalPlacements(placements);
+    onChange(
+      players.map((player, index) =>
+        resolved[index] === goalPlacement(player.scores[key]) && index !== playerIndex
+          ? player
+          : { ...player, scores: { ...player.scores, [key]: resolved[index] } },
+      ),
+    );
   }
 
   return (
@@ -226,11 +176,9 @@ export function ScoreSheet({
                       </td>
                       {players.map((player, index) => {
                         const key = goalRoundKey(round);
-                        const others = players
-                          .filter((_, otherIndex) => otherIndex !== index)
-                          .map((other) => placementOf(other.scores[key]));
-                        const options = goalPlaceOptions(others);
-                        const current = placementOf(player.scores[key]);
+                        const placements = players.map((other) => goalPlacement(other.scores[key]));
+                        const current = placements[index];
+                        const options = goalPlaceOptions(placements, index);
                         const optionValues = options.includes(current)
                           ? options
                           : [...options, current].sort((a, b) => a - b);

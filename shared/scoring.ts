@@ -100,8 +100,76 @@ export const GOAL_PLACES = [
 
 export const BLUE_GOAL_CAP = 5;
 
+/** Standard Wingspan player counts (Asia Flock mode would allow up to 7). */
+export const MIN_PLAYERS = 2;
+export const MAX_PLAYERS = 5;
+const MAX_FLOCK_PLAYERS = 7;
+
 export function goalRoundKey(round: number): string {
   return `goalR${round}`;
+}
+
+/** Highest green-board place that exists for this many players (2 players: 2nd). */
+export function maxGoalPlace(playerCount: number): number {
+  return Math.min(GOAL_PLACES.length, playerCount);
+}
+
+function placesAhead(placements: number[], place: number): number {
+  return placements.filter((other) => other >= 1 && other < place).length;
+}
+
+/**
+ * Green-board ranking problems for one round (0 = no place / no items).
+ *
+ * A place must equal 1 + the number of players ranked above it:
+ *  - `conflicts`: too many players are ahead — e.g. 2nd after a tie for 1st,
+ *    where the rules say the next place is not awarded.
+ *  - `gaps`: a better place is missing — e.g. 2nd with nobody 1st. This is
+ *    normal while placements are still being entered.
+ */
+export function goalPlacementIssues(placements: number[]): {
+  conflicts: number[];
+  gaps: number[];
+} {
+  const conflicts: number[] = [];
+  const gaps: number[] = [];
+  const maxPlace = maxGoalPlace(placements.length);
+  placements.forEach((place, index) => {
+    if (place < 1) return;
+    const expected = 1 + placesAhead(placements, place);
+    if (place < expected) conflicts.push(index);
+    else if (place > expected || place > maxPlace) gaps.push(index);
+  });
+  return { conflicts, gaps };
+}
+
+/**
+ * The places player `index` may choose: none, joining a tie, or any place not
+ * skipped by players already ranked above it. Places below may still be empty
+ * so placements can be entered in any order.
+ */
+export function goalPlaceOptions(placements: number[], index: number): number[] {
+  const others = placements.filter((_, otherIndex) => otherIndex !== index);
+  const options = [0];
+  for (let place = 1; place <= maxGoalPlace(placements.length); place += 1) {
+    if (place >= 1 + placesAhead(others, place)) options.push(place);
+  }
+  return options;
+}
+
+/**
+ * Push players down when a change leaves them ranked too high, keeping their
+ * relative order. For example 1st/2nd/3rd with 3rd changed to 1st becomes
+ * 1st/3rd/1st (the old 2nd drops to 3rd; 2nd is not awarded after a tie).
+ * Anyone pushed past the last place gets no place (4th+ scores 0).
+ */
+export function resolveGoalPlacements(placements: number[]): number[] {
+  const maxPlace = maxGoalPlace(placements.length);
+  return placements.map((place) => {
+    if (place < 1) return 0;
+    const resolved = Math.max(place, 1 + placesAhead(placements, place));
+    return resolved > maxPlace ? 0 : resolved;
+  });
 }
 
 /* ------------------------------------------------------------------ */
@@ -269,8 +337,12 @@ export function validateConfig(
   if (config.coreSets.length === 0) {
     return { valid: false, error: 'Choose at least one standalone set.' };
   }
-  if (playerCount < 2) {
-    return { valid: false, error: 'A game needs at least 2 players.' };
+  if (playerCount < MIN_PLAYERS) {
+    return { valid: false, error: `A game needs at least ${MIN_PLAYERS} players.` };
+  }
+  const maxPlayers = modes.includes('flock') ? MAX_FLOCK_PLAYERS : MAX_PLAYERS;
+  if (playerCount > maxPlayers) {
+    return { valid: false, error: `Wingspan is played with at most ${maxPlayers} players.` };
   }
   if (modes.includes('duet')) {
     if (!hasAsia) return { valid: false, error: 'Duet mode requires Wingspan Asia.' };
@@ -324,34 +396,31 @@ export function checkComplete(
   }
 
   if (profile.goalBoard === 'green') {
+    const errors: string[] = [];
     for (let round = 1; round <= GOAL_ROUNDS; round += 1) {
       const key = goalRoundKey(round);
-      const places = players
-        .map((player) => Math.round(Number(player.scores[key] ?? 0)))
-        .filter((place) => place >= 1 && place <= 3)
-        .sort((a, b) => a - b);
-      let expected = 1;
-      let index = 0;
-      while (index < places.length) {
-        const place = places[index];
-        let count = 0;
-        while (index < places.length && places[index] === place) {
-          count += 1;
-          index += 1;
-        }
-        if (place !== expected) {
-          return {
-            valid: false,
-            error: `Round ${round} goal placements are inconsistent — a place is missing.`,
-            fields: players.map((_, playerIndex) => ({ player: playerIndex, key })),
-          };
-        }
-        expected += count;
+      const { conflicts, gaps } = goalPlacementIssues(
+        players.map((player) => goalPlacement(player.scores[key])),
+      );
+      if (conflicts.length > 0) {
+        errors.push(`Round ${round}: after a tie the next place isn’t awarded`);
+      } else if (gaps.length > 0) {
+        errors.push(`Round ${round}: a better place is missing`);
       }
+      for (const playerIndex of [...conflicts, ...gaps]) fields.push({ player: playerIndex, key });
+    }
+    if (errors.length > 0) {
+      return { valid: false, error: `Check the end-of-round goals. ${errors.join('. ')}.`, fields };
     }
   }
 
   return { valid: true, fields: [] };
+}
+
+/** A stored green-board placement as 0 (none) or 1–3. */
+export function goalPlacement(value: number | null | undefined): number {
+  const place = typeof value === 'number' && Number.isFinite(value) ? Math.round(value) : 0;
+  return place >= 1 && place <= GOAL_PLACES.length ? place : 0;
 }
 
 function fieldLabel(profile: ScoringProfile, key: string): string {
@@ -474,10 +543,7 @@ export function computeGame(
         continue;
       }
 
-      const placements = players.map((player) => {
-        const value = Math.round(toNumber(player.scores[key]));
-        return value >= 1 && value <= 3 ? value : 0;
-      });
+      const placements = players.map((player) => goalPlacement(player.scores[key]));
       const points = computeGoalRoundPoints(placements, round);
       points.forEach((value, index) => {
         perPlayer[index][roundGoals.id] += value;

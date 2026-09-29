@@ -87,11 +87,17 @@ async function loadParticipatedGames(
 
   const playersByGame = new Map<string, PlayerRow[]>();
   if (games.results.length > 0) {
-    const placeholders = games.results.map(() => '?').join(', ');
+    // A subquery rather than `IN (?, ?, …)`: D1 caps bound parameters at 100.
     const players = await env.DB.prepare(
-      `SELECT * FROM game_players WHERE game_id IN (${placeholders}) ORDER BY seat ASC`,
+      `SELECT * FROM game_players
+        WHERE game_id IN (
+          SELECT g.id FROM games g
+            JOIN game_players gp ON gp.game_id = g.id
+           WHERE gp.user_id = ? AND gp.status = 'accepted' AND g.status = 'completed'
+        )
+        ORDER BY seat ASC`,
     )
-      .bind(...games.results.map((game) => game.id))
+      .bind(userId)
       .all<PlayerRow>();
     for (const player of players.results) {
       const list = playersByGame.get(player.game_id) ?? [];

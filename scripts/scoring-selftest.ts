@@ -4,7 +4,10 @@ import {
   checkComplete,
   computeGame,
   deriveProfile,
+  goalPlacementIssues,
+  goalPlaceOptions,
   normalizeConfig,
+  resolveGoalPlacements,
   TIEBREAK_KEY,
   validateConfig,
 } from '../shared/scoring.ts';
@@ -203,6 +206,22 @@ check(
   ]).valid,
   true,
 );
+
+// Green-board ranking helpers.
+check('options after tie for 1st skip 2nd', goalPlaceOptions([1, 1, 0], 2), [0, 1, 3]);
+check('options after single 1st', goalPlaceOptions([1, 0, 0], 1), [0, 1, 2, 3]);
+check('options any order when empty', goalPlaceOptions([0, 0, 0], 0), [0, 1, 2, 3]);
+check('2-player options have no 3rd', goalPlaceOptions([0, 0], 0), [0, 1, 2]);
+check('3rd turned into 1st bumps old 2nd', resolveGoalPlacements([1, 2, 1]), [1, 3, 1]);
+check('bump keeps relative order', resolveGoalPlacements([1, 2, 3, 1]), [1, 3, 0, 1]);
+check('gaps are left for later entry', resolveGoalPlacements([0, 2, 0]), [0, 2, 0]);
+check('issues: 2nd after tie is a conflict', goalPlacementIssues([1, 1, 2]), { conflicts: [2], gaps: [] });
+check('issues: missing 1st is a gap', goalPlacementIssues([0, 2, 0]), { conflicts: [], gaps: [1] });
+check('issues: 3rd in 2-player game', goalPlacementIssues([1, 3]), { conflicts: [], gaps: [1] });
+
+// Player counts.
+check('6 players rejected', validateConfig(normalizeConfig({}), 6).valid, false);
+check('5 players ok', validateConfig(normalizeConfig({}), 5).valid, true);
 
 if (failures > 0) {
   console.error(`\n${failures} test(s) failed.`);

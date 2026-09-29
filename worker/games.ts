@@ -3,8 +3,12 @@ import {
   checkComplete,
   computeGame,
   deriveProfile,
+  GOAL_PLACES,
   GOAL_ROUNDS,
   goalRoundKey,
+  MAX_PLAYERS,
+  maxGoalPlace,
+  MIN_PLAYERS,
   nectarKey,
   normalizeConfig,
   TIEBREAK_KEY,
@@ -196,6 +200,7 @@ export async function canViewGame(env: Env, game: GameRow, userId: string): Prom
 /* ------------------------------------------------------------------ */
 
 const STATUSES: GameStatus[] = ['in_progress', 'completed', 'cancelled'];
+const PLAYERS_ERROR = `A game needs ${MIN_PLAYERS}–${MAX_PLAYERS} named players, each account only once.`;
 
 interface PlayerInput {
   id?: string;
@@ -229,7 +234,7 @@ function sanitizeScores(profile: ScoringProfile, scores: ScoreMap | undefined): 
     } else if (category.kind === 'roundGoals') {
       for (let round = 1; round <= GOAL_ROUNDS; round += 1) {
         const key = goalRoundKey(round);
-        put(key, scores?.[key], false, profile.goalBoard === 'green' ? 3 : undefined);
+        put(key, scores?.[key], false, profile.goalBoard === 'green' ? GOAL_PLACES.length : undefined);
       }
     } else {
       put(category.id, scores?.[category.id], category.kind === 'signed');
@@ -242,7 +247,9 @@ function sanitizeScores(profile: ScoringProfile, scores: ScoreMap | undefined): 
 
 /** Validate players and reject duplicate linked accounts. */
 function normalizePlayers(profile: ScoringProfile, input: unknown): PlayerInput[] | null {
-  if (!Array.isArray(input) || input.length === 0 || input.length > 8) return null;
+  if (!Array.isArray(input) || input.length < MIN_PLAYERS || input.length > MAX_PLAYERS) {
+    return null;
+  }
   const players: PlayerInput[] = [];
   const seenUsers = new Set<string>();
 
@@ -276,67 +283,51 @@ function validateScores(
   playerCount: number,
 ): string | null {
   if (profile.goalBoard !== 'green') return null;
-  const maxPlace = Math.min(3, playerCount);
-  if (maxPlace >= 3) return null;
+  const maxPlace = maxGoalPlace(playerCount);
   for (const player of players) {
     for (let round = 1; round <= GOAL_ROUNDS; round += 1) {
       const value = player.scores?.[goalRoundKey(round)];
       if (typeof value === 'number' && value > maxPlace) {
-        return `A placement of ${value} needs at least ${value} players.`;
+        return `There is no place ${value} with ${playerCount} players.`;
       }
     }
   }
   return null;
 }
 
-async function writePlayers(
+/** Insert the roster of a newly created game. */
+async function insertPlayers(
   env: Env,
   gameId: string,
   profile: ScoringProfile,
   ownerId: string,
   inputs: PlayerInput[],
 ): Promise<void> {
-  const existingRows = await loadPlayerRows(env, gameId);
-  const existingStatus = new Map(existingRows.map((row) => [row.id, row.status]));
-
   const computed = computeGame(
     profile,
     inputs.map((player) => ({ scores: player.scores ?? {} })),
   );
   const now = Date.now();
-
-  const statements: D1PreparedStatement[] = [
-    env.DB.prepare('DELETE FROM game_players WHERE game_id = ?').bind(gameId),
-  ];
-
-  inputs.forEach((input, index) => {
-    const id = typeof input.id === 'string' && input.id.length > 0 ? input.id : crypto.randomUUID();
-    // Owner and guests are accepted; other linked accounts must accept.
-    let status: PlayerStatus = 'accepted';
-    if (input.userId && input.userId !== ownerId) {
-      status = existingStatus.get(id) ?? 'pending';
-    }
-    statements.push(
-      env.DB.prepare(
-        `INSERT INTO game_players
-           (id, game_id, user_id, name, seat, status, scores, points, total, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      ).bind(
-        id,
-        gameId,
-        input.userId ?? null,
-        input.name,
-        index,
-        status,
-        JSON.stringify(input.scores ?? {}),
-        JSON.stringify(computed.perPlayer[index] ?? {}),
-        computed.totals[index] ?? 0,
-        now,
-        now,
-      ),
-    );
-  });
-
+  const statements = inputs.map((input, index) =>
+    env.DB.prepare(
+      `INSERT INTO game_players
+         (id, game_id, user_id, name, seat, status, scores, points, total, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ).bind(
+      input.id || crypto.randomUUID(),
+      gameId,
+      input.userId ?? null,
+      input.name,
+      index,
+      // The owner and guests are in; other linked accounts must accept.
+      input.userId && input.userId !== ownerId ? 'pending' : 'accepted',
+      JSON.stringify(input.scores ?? {}),
+      JSON.stringify(computed.perPlayer[index] ?? {}),
+      computed.totals[index] ?? 0,
+      now,
+      now,
+    ),
+  );
   await env.DB.batch(statements);
 }
 
@@ -405,11 +396,15 @@ gameRoutes.get('/', async (c) => {
   )
     .bind(user.id, user.id)
     .all<GameRow>();
+  // Only the players of games this user can see (not the whole table).
   const players = await c.env.DB.prepare(
     `SELECT gp.*, u.email AS user_email
        FROM game_players gp
-       LEFT JOIN users u ON u.id = gp.user_id`,
-  ).all<PlayerRow>();
+       LEFT JOIN users u ON u.id = gp.user_id
+      WHERE gp.game_id IN (SELECT id FROM (${VISIBLE_GAMES_SQL}))`,
+  )
+    .bind(user.id, user.id)
+    .all<PlayerRow>();
 
   const playersByGame = new Map<string, PlayerRow[]>();
   for (const player of players.results) {
@@ -430,7 +425,7 @@ gameRoutes.post('/', async (c) => {
   const profile = deriveProfile(config);
   const players = normalizePlayers(profile, body.players);
   if (!players) {
-    return c.json({ error: 'A game needs 1–8 named players, each account only once.' }, 400);
+    return c.json({ error: PLAYERS_ERROR }, 400);
   }
 
   const validation = validateConfig(config, players.length);
@@ -470,7 +465,7 @@ gameRoutes.post('/', async (c) => {
     )
     .run();
 
-  await writePlayers(c.env, id, profile, user.id, players);
+  await insertPlayers(c.env, id, profile, user.id, players);
   const game = await loadGame(c.env, id);
   return c.json({ game }, 201);
 });
@@ -526,7 +521,7 @@ gameRoutes.patch('/:id', async (c) => {
   if (body.players !== undefined) {
     inputs = normalizePlayers(profile, body.players);
     if (!inputs) {
-      return c.json({ error: 'A game needs 1–8 named players, each account only once.' }, 400);
+      return c.json({ error: PLAYERS_ERROR }, 400);
     }
     if (!sameRoster(existingRows, inputs)) {
       return c.json({ error: 'Players cannot be changed after the game is created.' }, 400);
