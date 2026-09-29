@@ -177,7 +177,8 @@ export const authRoutes = new Hono<AppEnv>();
 authRoutes.get('/google', async (c) => {
   const { GOOGLE_CLIENT_ID } = c.env;
   if (!GOOGLE_CLIENT_ID) {
-    return c.json({ error: 'Google OAuth is not configured (GOOGLE_CLIENT_ID missing).' }, 500);
+    console.error('Google OAuth is not configured (GOOGLE_CLIENT_ID missing).');
+    return c.redirect('/login?auth=config_error');
   }
 
   const state = randomToken(16);
@@ -212,10 +213,10 @@ authRoutes.get('/google/callback', async (c) => {
   deleteCookie(c, OAUTH_STATE_COOKIE, { path: '/' });
 
   if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET) {
-    return c.redirect('/?auth=config_error');
+    return c.redirect('/login?auth=config_error');
   }
   if (!code || !state || !expectedState || state !== expectedState) {
-    return c.redirect('/?auth=invalid_state');
+    return c.redirect('/login?auth=invalid_state');
   }
 
   try {
@@ -232,14 +233,14 @@ authRoutes.get('/google/callback', async (c) => {
       }),
     });
 
-    if (!tokenResponse.ok) return c.redirect('/?auth=token_error');
+    if (!tokenResponse.ok) return c.redirect('/login?auth=token_error');
     const tokens = (await tokenResponse.json()) as { access_token?: string };
-    if (!tokens.access_token) return c.redirect('/?auth=token_error');
+    if (!tokens.access_token) return c.redirect('/login?auth=token_error');
 
     const profileResponse = await fetch('https://openidconnect.googleapis.com/v1/userinfo', {
       headers: { authorization: `Bearer ${tokens.access_token}` },
     });
-    if (!profileResponse.ok) return c.redirect('/?auth=profile_error');
+    if (!profileResponse.ok) return c.redirect('/login?auth=profile_error');
 
     const profile = (await profileResponse.json()) as {
       sub?: string;
@@ -249,10 +250,10 @@ authRoutes.get('/google/callback', async (c) => {
       picture?: string;
     };
 
-    if (!profile.sub || !profile.email) return c.redirect('/?auth=profile_error');
-    if (profile.email_verified === false) return c.redirect('/?auth=email_unverified');
+    if (!profile.sub || !profile.email) return c.redirect('/login?auth=profile_error');
+    if (profile.email_verified !== true) return c.redirect('/login?auth=email_unverified');
     if (!(await isEmailAllowed(c.env, profile.email))) {
-      return c.redirect('/?auth=not_allowed');
+      return c.redirect('/login?auth=not_allowed');
     }
 
     const userId = await upsertUser(c.env, {
@@ -266,7 +267,7 @@ authRoutes.get('/google/callback', async (c) => {
     return c.redirect('/');
   } catch (error) {
     console.error('OAuth callback failed', error);
-    return c.redirect('/?auth=oauth_failed');
+    return c.redirect('/login?auth=oauth_failed');
   }
 });
 
